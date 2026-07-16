@@ -1,0 +1,11 @@
+.next
+.turbo
+coverage
+dist
+node_modules
+playwright-report
+test-results
+
+# The supplied specifications are source records, not generated code.
+*.md
+schemas/evidence-bundle.schema.json

@@ -66,7 +66,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 1.1 Bootstrap monorepo
 
-- [ ] Initialize pnpm workspace and Turborepo.
+- [-] Initialize pnpm workspace and Turborepo. (Primary coordinator, local `main`.)
 - [ ] Create `apps/web`, `apps/cli`, `packages/contracts`, `packages/db`, `packages/evidence`, `packages/shared`, `packages/ui`, and `tests/e2e`.
 - [ ] Add strict TypeScript configuration.
 - [ ] Add formatting, linting, and import-boundary rules.
