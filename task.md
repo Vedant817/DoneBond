@@ -31,7 +31,7 @@ A task is complete only when:
 
 - [!] Create a new empty repository owned by `Vedant817`. Local repository is fresh; GitHub repository creation is blocked because `Vedant817/donebond` does not exist and `github-personal` has no usable SSH key.
 - [x] Do not copy an earlier project’s `.git` directory or commit history.
-- [ ] Set repository-local identity:
+- [x] Set repository-local identity:
 
 ```bash
 git config --local user.name "Vedant817"
@@ -52,11 +52,11 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 0.2 Establish project records
 
-- [-] Copy this build kit into the fresh repository. (Primary coordinator, local `main`.)
-- [ ] Add license, code of conduct if desired, contribution guide, and issue templates.
-- [ ] Add `.gitignore`, `.editorconfig`, Node version file, and package manager declaration.
-- [ ] Add `DECISIONS.md` or use ADRs for architectural changes.
-- [ ] Record hackathon deadline and release checklist in the README.
+- [x] Copy this build kit into the fresh repository.
+- [x] Add license, code of conduct if desired, contribution guide, and issue templates.
+- [x] Add `.gitignore`, `.editorconfig`, Node version file, and package manager declaration.
+- [x] Add `DECISIONS.md` or use ADRs for architectural changes.
+- [x] Record hackathon deadline and release checklist in the README.
 
 **Verification:** clean clone contains every operating document and no secrets.
 
@@ -611,3 +611,13 @@ Agents append entries using this exact shape:
 ```
 
 Do not rewrite or erase earlier entries except to correct an explicitly documented mistake.
+
+## 2026-07-17 03:34 IST — Codex/primary coordinator — 0.1 (partial), 0.2
+- Branch/worktree: `main` in `/Users/salescode/Documents/Code/DoneBond`
+- Summary: Initialized a fresh repository with zero imported history; configured the required local personal identity and SSH-alias remote; added repository metadata, safe environment template, licensing, contribution and issue guidance, runtime/package-manager pins, and a portable checksum manifest. Milestone 0.1 remains blocked only on GitHub repository creation and SSH authentication; Milestone 0.2 is complete.
+- Files changed: Initial tracked build kit plus `.editorconfig`, `.env.example`, `.github/ISSUE_TEMPLATE/*`, `.gitignore`, `.npmrc`, `.nvmrc`, `CONTRIBUTING.md`, `LICENSE`, `MANIFEST.sha256`, `package.json`, `pnpm-lock.yaml`, `README.md`, and `task.md`.
+- Verification commands: `bash scripts/verify-git-identity.sh`; `shasum -a 256 -c MANIFEST.sha256`; secret-pattern `rg` scan; `git diff --cached --check`; `pnpm install --frozen-lockfile`; local `git clone --no-local`; `git log -1 --format=...`; `git rev-list --all --count`; `ssh -T git@github-personal`.
+- Results: Identity script passed; 38 manifest entries passed; secret-pattern scan returned zero matches; diff check passed; frozen install passed with pnpm 11.6.0; clean clone was clean and contained required records; root commit author/committer both matched `Vedant817 <vedantmahajan271@gmail.com>`; history count was 1 after the baseline commit. SSH failed with `Permission denied (publickey)` and the GitHub connector returned 404 for `Vedant817/donebond`.
+- Security/privacy notes: No credentials were added. RPC and contract values remain empty until verified/configured; only the officially confirmed testnet chain ID is present. Push is prohibited until personal SSH authentication succeeds.
+- Remaining risks/blockers: User must create or authorize the public `Vedant817/donebond` repository and configure the `github-personal` SSH key. Foundry, Solidity compiler, and GitHub CLI are not installed in the current environment.
+- Commit: `243db35b0029d777e4ed5ef34fdf96a0bac52545`
