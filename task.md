@@ -66,12 +66,12 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 1.1 Bootstrap monorepo
 
-- [-] Initialize pnpm workspace and Turborepo. (Primary coordinator, local `main`.)
-- [ ] Create `apps/web`, `apps/cli`, `packages/contracts`, `packages/db`, `packages/evidence`, `packages/shared`, `packages/ui`, and `tests/e2e`.
-- [ ] Add strict TypeScript configuration.
-- [ ] Add formatting, linting, and import-boundary rules.
-- [ ] Add workspace scripts: `format:check`, `lint`, `typecheck`, `test`, `test:contracts`, `build`, `test:e2e`, `verify`.
-- [ ] Ensure package dependency direction follows the architecture.
+- [x] Initialize pnpm workspace and Turborepo.
+- [x] Create `apps/web`, `apps/cli`, `packages/contracts`, `packages/db`, `packages/evidence`, `packages/shared`, `packages/ui`, and `tests/e2e`.
+- [x] Add strict TypeScript configuration.
+- [x] Add formatting, linting, and import-boundary rules.
+- [x] Add workspace scripts: `format:check`, `lint`, `typecheck`, `test`, `test:contracts`, `build`, `test:e2e`, `verify`.
+- [x] Ensure package dependency direction follows the architecture.
 
 **Verification:** all baseline scripts run from a clean repository.
 
@@ -621,3 +621,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: No credentials were added. RPC and contract values remain empty until verified/configured; only the officially confirmed testnet chain ID is present. Push is prohibited until personal SSH authentication succeeds.
 - Remaining risks/blockers: User must create or authorize the public `Vedant817/donebond` repository and configure the `github-personal` SSH key. Foundry, Solidity compiler, and GitHub CLI are not installed in the current environment.
 - Commit: `243db35b0029d777e4ed5ef34fdf96a0bac52545`
+
+## 2026-07-17 03:43 IST — Codex/primary coordinator — 1.1
+- Branch/worktree: `main` in `/Users/salescode/Documents/Code/DoneBond`
+- Summary: Added a ten-project pnpm/Turborepo workspace; strict shared TypeScript configs; pinned and locked current Next.js/React/Turbo toolchain; root formatting, lint, typecheck, test, contract-test, build, e2e, and verify scripts; an executable dependency-boundary policy with a negative regression test; a minimal App Router web surface; and a real Playwright HTTP smoke test. Explicitly approved only the `sharp` and `unrs-resolver` dependency build scripts required by the reviewed toolchain.
+- Files changed: Root workspace/config/lock files; `apps/cli/**`; `apps/web/**`; `packages/{config,contracts,db,evidence,shared,ui}/**`; `scripts/check-workspace-boundaries*`; `tests/e2e/**`; `MANIFEST.sha256`; `task.md`.
+- Verification commands: `pnpm install --frozen-lockfile`; `pnpm verify`; `pnpm turbo ls`; `pnpm turbo run build --dry-run=json`; `pnpm peers check`; `shasum -a 256 -c MANIFEST.sha256`; local `git clone --no-local`; `git status --short`; `bash scripts/verify-git-identity.sh`; `git diff --check`.
+- Results: Clean-clone manifest and frozen install passed; formatting and lint passed; boundary validator passed and its prohibited shared-to-app dependency test failed the injected graph as expected; strict typecheck passed in 6 packages; 2 boundary tests passed; 1 contract-package specification check passed; production build passed in 6 packages including Next.js 16.2.10; 1 Playwright HTTP e2e test passed; Turbo listed all 9 named workspace packages and included `@donebond/web#build`; peer check found no issues; clean-clone worktree stayed clean after verification.
+- Security/privacy notes: No secrets or runtime credentials were added. Next.js 16.2.10 and React 19.2.7 were selected from the current package registry; unsupported ESLint 10 was replaced with compatible ESLint 9.39.5 rather than suppressing rules. Workspace/output tracing is pinned to the repository root, and generated build/test state is ignored.
+- Remaining risks/blockers: Contract test command currently verifies only the scaffold/spec binding because Foundry implementation is Milestone 3. Real browser rendering/a11y tests and product UI are later milestones. Remote repository creation/SSH authentication remains blocked under 0.1, so commits are not pushed.
+- Commit: `2f64b580bd8d7f90230518c362ef4ee1dbcecba7` with generated-artifact correction `8c276b88a0a9b363461122267db168487d0b2e4c`
