@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/Vedant817
+    about: Contact the owner privately; do not disclose vulnerabilities or secrets in a public issue.

@@ -1,0 +1,37 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+
+# Build and test output
+.next/
+.turbo/
+dist/
+coverage/
+playwright-report/
+test-results/
+cache/
+out/
+broadcast/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local databases and logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# DoneBond local credentials and generated evidence
+.donebond/
+donebond-evidence-*.json

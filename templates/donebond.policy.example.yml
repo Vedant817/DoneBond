@@ -1,0 +1,81 @@
+schemaVersion: 1
+repository:
+  requireCleanWorkingTree: true
+  allowedBranches:
+    - main
+    - "feat/*"
+  expectedRemoteOwner: Vedant817
+checks:
+  - key: format
+    label: Formatting
+    executable: pnpm
+    args: ["format:check"]
+    cwd: "."
+    timeoutSeconds: 120
+    required: true
+    maxOutputBytes: 32768
+
+  - key: lint
+    label: Lint
+    executable: pnpm
+    args: ["lint"]
+    cwd: "."
+    timeoutSeconds: 180
+    required: true
+    maxOutputBytes: 65536
+
+  - key: typecheck
+    label: Type checking
+    executable: pnpm
+    args: ["typecheck"]
+    cwd: "."
+    timeoutSeconds: 240
+    required: true
+    maxOutputBytes: 65536
+
+  - key: tests
+    label: Unit and integration tests
+    executable: pnpm
+    args: ["test", "--", "--run"]
+    cwd: "."
+    timeoutSeconds: 600
+    required: true
+    maxOutputBytes: 131072
+
+  - key: contracts
+    label: Smart contract tests
+    executable: pnpm
+    args: ["test:contracts"]
+    cwd: "."
+    timeoutSeconds: 600
+    required: true
+    maxOutputBytes: 131072
+
+  - key: build
+    label: Production build
+    executable: pnpm
+    args: ["build"]
+    cwd: "."
+    timeoutSeconds: 900
+    required: true
+    maxOutputBytes: 131072
+
+  - key: e2e
+    label: End-to-end tests
+    executable: pnpm
+    args: ["test:e2e"]
+    cwd: "."
+    timeoutSeconds: 900
+    required: false
+    maxOutputBytes: 131072
+
+environment:
+  allow:
+    - CI
+    - NODE_ENV
+    - PATH
+    - HOME
+    - TMPDIR
+
+redaction:
+  additionalPatterns: []

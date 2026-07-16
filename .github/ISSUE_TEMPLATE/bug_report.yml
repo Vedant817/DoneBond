@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible DoneBond defect without including secrets.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Do not include tokens, private keys, wallet mnemonics, private evidence, or unredacted logs.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Safe reproduction
+      description: Provide the smallest reproduction with sensitive values removed.
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: DoneBond commit
+      description: Full Git commit ID, if available.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node/pnpm version, browser, and chain ID as relevant.

@@ -1,0 +1,613 @@
+# DoneBond Implementation Tracker
+
+This file is the source of truth for implementation progress. Agents must update it after every verified task. Do not mark an item complete because code was written; mark it complete only when its stated verification passes and the evidence or command is recorded in the work log.
+
+## Status legend
+
+- `[ ]` not started
+- `[-]` in progress
+- `[x]` implemented and verified
+- `[!]` blocked; add the blocker and owner
+
+## Global definition of done
+
+A task is complete only when:
+
+1. Acceptance criteria are satisfied.
+2. Relevant automated tests exist and pass.
+3. Formatting, lint, and type checking pass for touched code.
+4. Security/privacy implications were reviewed.
+5. Documentation/configuration is updated.
+6. No temporary hardcoding, fake result, suppressed error, or untracked TODO remains.
+7. A verifier other than the implementer reviews high-risk work.
+8. `task.md` work log records commands and results.
+9. Changes are committed with `Vedant817 <vedantmahajan271@gmail.com>`.
+
+---
+
+# Milestone 0 — Repository safety and baseline
+
+## 0.1 Create a fresh hackathon repository
+
+- [!] Create a new empty repository owned by `Vedant817`. Local repository is fresh; GitHub repository creation is blocked because `Vedant817/donebond` does not exist and `github-personal` has no usable SSH key.
+- [x] Do not copy an earlier project’s `.git` directory or commit history.
+- [ ] Set repository-local identity:
+
+```bash
+git config --local user.name "Vedant817"
+git config --local user.email "vedantmahajan271@gmail.com"
+```
+
+- [x] Configure the personal SSH remote, preferably:
+
+```bash
+git remote add origin git@github-personal:Vedant817/donebond.git
+```
+
+- [x] Run `scripts/verify-git-identity.sh` successfully.
+- [!] Verify authentication using `ssh -T git@github-personal`. Blocked: `Permission denied (publickey)` on 2026-07-17.
+- [x] Confirm no work-account email appears in `git config --local --list` or the remote URL.
+
+**Verification:** script exits 0; first commit author/committer matches personal identity; remote resolves to `Vedant817` through the personal alias.
+
+## 0.2 Establish project records
+
+- [-] Copy this build kit into the fresh repository. (Primary coordinator, local `main`.)
+- [ ] Add license, code of conduct if desired, contribution guide, and issue templates.
+- [ ] Add `.gitignore`, `.editorconfig`, Node version file, and package manager declaration.
+- [ ] Add `DECISIONS.md` or use ADRs for architectural changes.
+- [ ] Record hackathon deadline and release checklist in the README.
+
+**Verification:** clean clone contains every operating document and no secrets.
+
+---
+
+# Milestone 1 — Workspace and continuous quality
+
+## 1.1 Bootstrap monorepo
+
+- [ ] Initialize pnpm workspace and Turborepo.
+- [ ] Create `apps/web`, `apps/cli`, `packages/contracts`, `packages/db`, `packages/evidence`, `packages/shared`, `packages/ui`, and `tests/e2e`.
+- [ ] Add strict TypeScript configuration.
+- [ ] Add formatting, linting, and import-boundary rules.
+- [ ] Add workspace scripts: `format:check`, `lint`, `typecheck`, `test`, `test:contracts`, `build`, `test:e2e`, `verify`.
+- [ ] Ensure package dependency direction follows the architecture.
+
+**Verification:** all baseline scripts run from a clean repository.
+
+## 1.2 Continuous integration
+
+- [ ] Add CI for install with frozen lockfile.
+- [ ] Run format, lint, typecheck, unit tests, contract tests, and build.
+- [ ] Add an optional e2e job with deterministic services.
+- [ ] Cache dependencies safely.
+- [ ] Pin third-party actions where practical.
+- [ ] Add secret scanning and dependency audit.
+- [ ] Ensure CI does not require production secrets for pull requests.
+
+**Verification:** CI passes on the initial scaffold and fails on an intentionally broken test in a temporary validation branch.
+
+## 1.3 Shared domain model
+
+- [ ] Define project, task, policy, check result, evidence bundle, chain transaction, and receipt types.
+- [ ] Define stable error codes.
+- [ ] Define supported chain configuration from environment variables.
+- [ ] Add unit tests for address and identifier normalization.
+
+**Parallelization:** shared-domain agent may work independently, but dependent package agents wait for the integration checkpoint.
+
+**Integration checkpoint 1:** shared schemas are versioned and merged before evidence/API/UI implementations diverge.
+
+---
+
+# Milestone 2 — Evidence protocol
+
+## 2.1 Policy schema
+
+- [ ] Implement YAML policy parser using a strict schema.
+- [ ] Define executable, args, cwd, timeout, required flag, output limits, environment allowlist, and redaction patterns.
+- [ ] Reject unknown fields unless intentionally allowed by a versioned extension mechanism.
+- [ ] Reject paths outside repository root.
+- [ ] Reject shell wrappers and unsafe executable definitions.
+- [ ] Produce actionable validation errors with file/field context.
+- [ ] Canonicalize policy and derive `policyHash`.
+
+**Tests:** valid policy, malformed YAML, duplicate keys, path traversal, shell metacharacter cases, unsupported version, stable hash.
+
+## 2.2 Safe process runner
+
+- [ ] Execute executable + argv directly without a shell.
+- [ ] Run in approved working directory.
+- [ ] Use explicit environment allowlist.
+- [ ] Stream concise progress to terminal.
+- [ ] Capture bounded stdout/stderr.
+- [ ] Enforce timeout and kill child process groups.
+- [ ] Record start/end/duration/exit code/signal/timeout.
+- [ ] Support deterministic sequential execution first; add bounded parallel checks only if safe and needed.
+
+**Tests:** spaces, special characters, timeout, child process, large output, nonzero exit, missing executable.
+
+## 2.3 Redaction and truncation
+
+- [ ] Implement default secret patterns.
+- [ ] Implement validated project patterns.
+- [ ] Redact before persistence and public hashing.
+- [ ] Record redaction counts and deterministic markers.
+- [ ] Add output truncation with original byte count and digest.
+- [ ] Add server-side residual-secret rejection.
+
+**Tests:** seeded fake GitHub token, private key, database URL, split-line secret, false-positive controls, deterministic output.
+
+## 2.4 Git collector
+
+- [ ] Locate repository root.
+- [ ] Capture normalized remote URL without credentials.
+- [ ] Capture branch, full HEAD object ID, tree ID, author/committer, and commit timestamp.
+- [ ] Detect staged, unstaged, and untracked changes.
+- [ ] Capture bounded file/diff summary without storing source content by default.
+- [ ] Derive EVM-compatible `commitHash` from the full Git object ID.
+- [ ] Handle detached HEAD and repositories with no commits.
+
+**Tests:** clean repo, dirty repo, untracked files, detached HEAD, credentialed HTTPS remote redaction, SHA formats.
+
+## 2.5 Canonical evidence bundle
+
+- [ ] Implement schema version 1.
+- [ ] Bind task hash, policy hash, Git identity, checks, tool version, and safe environment metadata.
+- [ ] Derive passing status from required checks and repository constraints.
+- [ ] Canonicalize JSON and calculate `evidenceHash`.
+- [ ] Write pretty JSON for humans while hashing canonical bytes.
+- [ ] Add independent local `verify-bundle` function.
+
+**Tests:** insertion order, altered exit code, altered task hash, missing required check, duplicate check, unsupported schema, stable fixtures.
+
+**Integration checkpoint 2:** evidence fixtures and hash test vectors are frozen before API and contract integration.
+
+---
+
+# Milestone 3 — Monad smart contract
+
+## 3.1 Foundry setup
+
+- [ ] Initialize Foundry project in `packages/contracts`.
+- [ ] Pin compiler and dependency versions.
+- [ ] Configure formatter, optimizer, RPC environment, and coverage.
+- [ ] Add deployment and verification scripts.
+
+## 3.2 Implement `DoneBondRegistry`
+
+- [ ] Implement compact task storage and explicit status enum.
+- [ ] Implement `createTask` with task/policy commitments and optional reward.
+- [ ] Implement assignee-only receipt submission.
+- [ ] Implement creator-only approval/rejection/cancellation.
+- [ ] Implement expiry semantics.
+- [ ] Implement pull-payment credits and reentrancy-safe withdrawal.
+- [ ] Add custom errors and complete events.
+- [ ] Prevent duplicate or terminal-state transitions.
+- [ ] Document every public/external function with NatSpec.
+
+## 3.3 Contract testing
+
+- [ ] Unit-test every successful transition.
+- [ ] Unit-test every access-control and invalid-state revert.
+- [ ] Test deadline boundaries.
+- [ ] Test large reward cast/overflow handling.
+- [ ] Test malicious and reverting withdrawal receivers.
+- [ ] Add fuzz tests for actors, values, times, and hashes.
+- [ ] Add invariant handler for solvency and single-credit guarantees.
+- [ ] Generate gas report and review unexpected costs.
+
+## 3.4 Independent contract audit
+
+- [ ] Contract-auditor subagent reviews specification before implementation merge.
+- [ ] Auditor independently derives state machine and accounting invariants.
+- [ ] Run static analysis where reproducible.
+- [ ] Resolve all critical/high findings and document accepted lower-risk findings.
+
+**Verification:** implementer does not self-approve this milestone.
+
+## 3.5 Testnet deployment
+
+- [ ] Confirm current official Monad Testnet chain configuration.
+- [ ] Fund a dedicated deployment wallet with test MON.
+- [ ] Deploy contract.
+- [ ] Verify source code in supported explorer.
+- [ ] Record address, transaction, chain ID, compiler, optimizer, ABI, and deployment commit.
+- [ ] Perform live smoke calls: create task, submit receipt, approve, withdraw.
+
+**Integration checkpoint 3:** ABI and address are versioned before web transaction work begins.
+
+---
+
+# Milestone 4 — Database and API
+
+## 4.1 Database foundation
+
+- [ ] Implement Drizzle schema and migrations for all MVP entities.
+- [ ] Add constraints and indexes for public IDs, chain logs, idempotency, and normalized wallets.
+- [ ] Add typed repository/service layer.
+- [ ] Add local database development setup.
+- [ ] Seed only explicit development fixtures; never seed production success data.
+
+## 4.2 Authentication and authorization
+
+- [ ] Implement secure browser authentication.
+- [ ] Implement wallet ownership association/signature challenge if used.
+- [ ] Add project ownership/member checks.
+- [ ] Add authorization matrix tests.
+- [ ] Ensure public endpoints use a strict field allowlist.
+
+## 4.3 CLI tokens
+
+- [ ] Generate cryptographically secure project-scoped tokens.
+- [ ] Show plaintext once.
+- [ ] Store only a slow/strong hash or keyed digest appropriate for high-entropy tokens.
+- [ ] Implement revocation, last-used timestamp, and rate limiting.
+- [ ] Add log redaction for token headers.
+
+## 4.4 Projects and policies API
+
+- [ ] Project CRUD.
+- [ ] Policy upload/validation/canonicalization.
+- [ ] Policy activation/version history.
+- [ ] Repository metadata validation.
+- [ ] Idempotent writes and stable errors.
+
+## 4.5 Tasks API
+
+- [ ] Create task draft with canonical `taskHash` and policy binding.
+- [ ] Validate assignee, deadline, reward, and supported network.
+- [ ] Create chain transaction intent.
+- [ ] Persist submitted transaction hash and reconcile confirmation/event.
+- [ ] Handle wallet rejection, replacement, revert, and unknown status.
+
+## 4.6 Evidence API
+
+- [ ] Accept authenticated, bounded evidence uploads.
+- [ ] Validate schema and required checks.
+- [ ] Recompute policy/task/commit/evidence commitments.
+- [ ] Run residual secret checks.
+- [ ] Store safe bundle in object storage or database for MVP.
+- [ ] Persist check summaries transactionally.
+- [ ] Return unsigned receipt call parameters only for passing evidence.
+- [ ] Prevent conflicting replay/idempotency requests.
+
+## 4.7 Public receipt API
+
+- [ ] Return only allowed fields.
+- [ ] Provide safe bundle download.
+- [ ] Include chain/explorer metadata and integrity status.
+- [ ] Add caching without serving stale pending lifecycle state incorrectly.
+
+## 4.8 Event indexing and reconciliation
+
+- [ ] Implement contract event decoder.
+- [ ] Store event uniquely by chain/tx/log index.
+- [ ] Reconcile pending transactions.
+- [ ] Make processing idempotent and reorg-aware to the extent appropriate for testnet MVP.
+- [ ] Add admin/debug visibility without exposing sensitive data.
+
+**Integration checkpoint 4:** golden task/evidence fixtures pass client and server hash comparisons.
+
+---
+
+# Milestone 5 — CLI
+
+## 5.1 CLI skeleton
+
+- [ ] Package executable as `donebond`.
+- [ ] Add version/help/error conventions.
+- [ ] Add structured nonzero exit codes.
+- [ ] Ensure secrets never appear in debug logs.
+
+## 5.2 `donebond init`
+
+- [ ] Discover repository.
+- [ ] Generate policy template without overwriting existing file.
+- [ ] Ask for API URL/project ID/token through safe input.
+- [ ] Store configuration with restrictive permissions where supported.
+- [ ] Validate connection.
+
+## 5.3 `donebond policy validate`
+
+- [ ] Parse and display checks.
+- [ ] Show exact executable/args/cwd/timeout.
+- [ ] Explain unsafe or unsupported fields.
+- [ ] Print policy hash.
+
+## 5.4 `donebond task pull`
+
+- [ ] Fetch task and safe acceptance criteria.
+- [ ] Verify project/policy match.
+- [ ] Save local task manifest.
+- [ ] Avoid modifying implementation files.
+
+## 5.5 `donebond verify`
+
+- [ ] Confirm task and policy hashes.
+- [ ] Collect Git state.
+- [ ] Execute checks.
+- [ ] Render concise progress and final table.
+- [ ] Produce evidence JSON even on failure for diagnostics.
+- [ ] Refuse passing status for dirty/stale commit according to policy.
+- [ ] Return nonzero exit when required verification fails.
+
+## 5.6 `donebond submit`
+
+- [ ] Validate bundle locally.
+- [ ] Upload with idempotency key and retry policy.
+- [ ] Compare server commitments.
+- [ ] Print public receipt and web transaction link/instructions.
+- [ ] Never sign with or request a raw private key.
+
+## 5.7 `donebond receipt verify`
+
+- [ ] Download public bundle.
+- [ ] Recompute evidence commitment.
+- [ ] Read contract state/event through RPC.
+- [ ] Compare all commitments and print independently verified status.
+
+## 5.8 CLI distribution
+
+- [ ] Build portable package.
+- [ ] Test install from packed tarball in a clean temporary directory.
+- [ ] Document Node/runtime requirements.
+- [ ] Publish only if credentials and package name are ready; local `pnpm dlx` path is acceptable for the hackathon demo.
+
+---
+
+# Milestone 6 — Web product
+
+## 6.1 Design system
+
+- [ ] Define typography, spacing, surface, border, status, and code styles.
+- [ ] Build accessible primitives for button, input, textarea, dialog, toast, tabs, status badge, hash display, check result, and transaction state.
+- [ ] Avoid generic card overload and decorative Web3 clichés.
+- [ ] Add responsive and reduced-motion behavior.
+
+## 6.2 Landing and onboarding
+
+- [ ] Clear product pitch.
+- [ ] Explain the evidence/chain distinction accurately.
+- [ ] Show install command and real sample receipt.
+- [ ] Provide “Create project” path.
+
+## 6.3 Project screens
+
+- [ ] Project list/create/detail.
+- [ ] Policy status and version.
+- [ ] CLI token creation/revocation.
+- [ ] Copyable setup commands.
+
+## 6.4 Task creation
+
+- [ ] Acceptance-criteria editor.
+- [ ] Assignee wallet and deadline validation.
+- [ ] Policy summary and commitment preview.
+- [ ] Optional MON reward.
+- [ ] Network/contract/amount review.
+- [ ] Wallet rejection/pending/revert/recovery states.
+
+## 6.5 Task detail and receipt
+
+- [ ] Human-readable requested outcome.
+- [ ] Git commit and repository state.
+- [ ] Deterministic check results.
+- [ ] Redacted output previews.
+- [ ] Task/policy/evidence/commit hashes.
+- [ ] Transaction and explorer links.
+- [ ] Creator approve/reject controls with permission/state guards.
+- [ ] Contributor withdrawal flow.
+
+## 6.6 Public proof page
+
+- [ ] No-login route with stable public ID.
+- [ ] Integrity result and caveat.
+- [ ] Safe bundle download.
+- [ ] Responsive hash and check presentation.
+- [ ] Metadata suitable for sharing.
+
+## 6.7 Error and empty states
+
+- [ ] First project/task.
+- [ ] No receipt yet.
+- [ ] Failed evidence.
+- [ ] RPC unavailable.
+- [ ] Unsupported wallet/network.
+- [ ] Pending or replaced transaction.
+- [ ] Evidence unavailable or hash mismatch.
+
+**Integration checkpoint 5:** the entire UI uses real API/contract state; no hardcoded successful task remains.
+
+---
+
+# Milestone 7 — End-to-end integration
+
+## 7.1 Sample repository fixture
+
+- [ ] Create a tiny, original sample API with a deliberately missing rate-limit behavior.
+- [ ] Add a test that initially fails for the correct reason.
+- [ ] Ensure the final implementation is small enough to explain in the demo.
+- [ ] Never manipulate test results; the code change must make the test pass.
+
+## 7.2 Golden failure-to-pass flow
+
+- [ ] Create project and task.
+- [ ] Pull task through CLI.
+- [ ] Run failed verification.
+- [ ] Confirm failed bundle cannot be submitted onchain.
+- [ ] Implement and commit real fix.
+- [ ] Run passing verification.
+- [ ] Upload and compare hashes.
+- [ ] Submit receipt on Monad.
+- [ ] View proof and explorer.
+- [ ] Approve and withdraw funded reward.
+
+## 7.3 Recovery flows
+
+- [ ] Wallet rejection leaves no false success state.
+- [ ] RPC timeout is reconciled later.
+- [ ] Duplicate API and contract actions are safe.
+- [ ] Refresh during pending transaction recovers state.
+- [ ] Invalid/altered bundle is rejected.
+
+## 7.4 Independent acceptance run
+
+- [ ] A verifier subagent starts from a fresh clone and written instructions.
+- [ ] It runs setup and the golden flow without implementer assistance.
+- [ ] Every failure is filed with severity and reproduction.
+- [ ] Critical/high issues are fixed and rerun.
+
+---
+
+# Milestone 8 — Production hardening
+
+## 8.1 Security review
+
+- [ ] Complete `SECURITY.md` checklist.
+- [ ] Run secret scan across history.
+- [ ] Run dependency audit.
+- [ ] Review auth/IDOR/CSRF/XSS controls.
+- [ ] Test evidence leakage and redaction.
+- [ ] Resolve contract audit findings.
+
+## 8.2 Reliability and observability
+
+- [ ] Structured logs and correlation IDs.
+- [ ] Metrics for validation failures, API errors, pending transactions, and event lag.
+- [ ] Health endpoint that checks dependencies safely.
+- [ ] Timeouts and retries with jitter for external calls.
+- [ ] No sensitive evidence in logs.
+
+## 8.3 Accessibility and responsive QA
+
+- [ ] Keyboard-only core flow.
+- [ ] Automated accessibility scan.
+- [ ] Manual mobile and desktop checks.
+- [ ] Status not color-only.
+- [ ] Long hashes/output do not break layout.
+
+## 8.4 Performance
+
+- [ ] Analyze web bundle.
+- [ ] Avoid blocking unnecessary RPC calls during first render.
+- [ ] Paginate task/receipt lists.
+- [ ] Bound evidence payloads.
+- [ ] Cache public immutable data safely.
+
+---
+
+# Milestone 9 — Deployment
+
+## 9.1 Environments
+
+- [ ] Define local, preview, and production/testnet environments.
+- [ ] Validate environment variables at startup.
+- [ ] Keep secrets in platform secret stores.
+- [ ] Add safe database migration procedure and rollback note.
+
+## 9.2 Web/API/database deployment
+
+- [ ] Provision production database.
+- [ ] Deploy web/API.
+- [ ] Configure object storage if used.
+- [ ] Configure public base URL and chain metadata.
+- [ ] Run migrations.
+- [ ] Verify security headers and HTTPS.
+
+## 9.3 Production smoke test
+
+- [ ] Sign in.
+- [ ] Create project/token.
+- [ ] Create funded task on testnet.
+- [ ] Run CLI from a fresh machine/user directory.
+- [ ] Submit receipt.
+- [ ] Approve and withdraw.
+- [ ] Verify explorer and public proof links.
+- [ ] Save safe screenshots and transaction references.
+
+---
+
+# Milestone 10 — Documentation, demo, and submission
+
+## 10.1 Public README
+
+- [ ] Problem and solution.
+- [ ] Architecture diagram.
+- [ ] Why Monad is necessary.
+- [ ] Setup prerequisites.
+- [ ] Local development.
+- [ ] Contract deployment/verification.
+- [ ] CLI workflow.
+- [ ] Environment variables without secrets.
+- [ ] Testing commands.
+- [ ] Security limitations and threat model link.
+- [ ] Hosted URL, contract address, explorer, demo video.
+
+## 10.2 Demo preparation
+
+- [ ] Follow `DEMO_AND_SUBMISSION.md`.
+- [ ] Keep video below three minutes.
+- [ ] Use one coherent real flow.
+- [ ] Pre-fund only with test MON and never expose keys.
+- [ ] Record at readable zoom with no notifications/secrets.
+- [ ] Rehearse an offline fallback explanation without replacing the real live proof.
+
+## 10.3 Judge-focused audit
+
+- [ ] No placeholder dashboard metrics.
+- [ ] No button that returns unconditional success.
+- [ ] No suspicious imported history or giant unexplained commit.
+- [ ] Commit chronology shows incremental work.
+- [ ] Public repository and hosted app work in a logged-out browser.
+- [ ] Contract source is verified.
+- [ ] Demo links and public proof are stable.
+- [ ] One evaluator can identify the personal problem, USP, onchain necessity, and working result in under one minute.
+
+## 10.4 Submission
+
+- [ ] Project name and concise tagline.
+- [ ] Problem statement.
+- [ ] Solution and USP.
+- [ ] Hosted URL.
+- [ ] Public GitHub URL.
+- [ ] Network category.
+- [ ] Contract address.
+- [ ] Public demo video URL.
+- [ ] Social/build-in-public post if targeting viral prize.
+- [ ] Submit before the official deadline and save confirmation.
+
+---
+
+# Stretch backlog — only after all release gates pass
+
+- [ ] GitHub status-check integration
+- [ ] GitHub App issue/task import
+- [ ] Multiple verifier signatures
+- [ ] Dispute window and arbitrator role
+- [ ] Private encrypted evidence
+- [ ] x402 agent-to-agent payment endpoint
+- [ ] Reputation based on accepted verified outcomes
+- [ ] Policy marketplace/templates
+- [ ] Organization/RBAC support
+- [ ] Remote ephemeral runners
+
+---
+
+# Work log
+
+Agents append entries using this exact shape:
+
+```text
+## YYYY-MM-DD HH:MM TZ — <agent/role> — <task IDs>
+- Branch/worktree:
+- Summary:
+- Files changed:
+- Verification commands:
+- Results:
+- Security/privacy notes:
+- Remaining risks/blockers:
+- Commit:
+```
+
+Do not rewrite or erase earlier entries except to correct an explicitly documented mistake.
