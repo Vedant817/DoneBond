@@ -76,6 +76,10 @@ create a new migration instead.
   expired, and absolute-expired sessions cannot be revived. Session rows bind a
   wallet and user with a composite foreign key. CSRF-protected lookups include
   both digests in that conditional update, so invalid CSRF cannot extend a session.
+- Authentication rate limits use a PostgreSQL fixed-window counter keyed by a
+  lowercase SHA-256 digest and explicit scope. A conditional upsert makes the
+  allow/deny decision atomically across application instances; expiry-indexed,
+  bounded cleanup avoids unbounded stale-row accumulation and long cleanup locks.
 
 No success-state fixtures are seeded. Tests create their own records and must
 destroy them after use.

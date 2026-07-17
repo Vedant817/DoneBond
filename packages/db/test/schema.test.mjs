@@ -13,6 +13,7 @@ import {
 
 import {
   apiIdempotencyKeys,
+  authRateLimits,
   browserSessions,
   chainIntentType,
   chainTransactionStatus,
@@ -35,6 +36,7 @@ test("schema exposes every MVP entity", () => {
   assert.deepEqual(Object.keys(databaseSchema).sort(), [
     "apiIdempotencyKeys",
     "auditEvents",
+    "authRateLimits",
     "browserSessions",
     "chainTransactions",
     "cliTokens",
@@ -65,6 +67,7 @@ test("high-risk identities have database constraints", () => {
     return new Set([
       ...config.checks.map((item) => item.name),
       ...config.indexes.map((item) => item.config.name),
+      ...config.primaryKeys.map((item) => item.getName()),
       ...config.uniqueConstraints.map((item) => item.name)
     ]);
   };
@@ -80,6 +83,7 @@ test("high-risk identities have database constraints", () => {
   assert(constraintNames(cliTokens).has("cli_tokens_digest_unique"));
   assert(constraintNames(walletAuthChallenges).has("wallet_auth_challenges_nonce_digest_unique"));
   assert(constraintNames(browserSessions).has("browser_sessions_token_digest_unique"));
+  assert(constraintNames(authRateLimits).has("auth_rate_limits_scope_key_pk"));
 });
 
 test("migration history includes referential and normalization safeguards", async () => {
@@ -105,6 +109,8 @@ test("migration history includes referential and normalization safeguards", asyn
   assert.match(sql, /browser_sessions_wallet_user_fk/);
   assert.match(sql, /browser_sessions_token_digest_format/);
   assert.match(sql, /wallet_auth_challenges_nonce_digest_format/);
+  assert.match(sql, /auth_rate_limits_key_digest_format/);
+  assert.match(sql, /auth_rate_limits_expiry_idx/);
   assert.match(sql, /"resource_public_id" varchar\(26\) NOT NULL/);
   assert.doesNotMatch(sql, /token_plaintext|private_key|mnemonic/i);
 });

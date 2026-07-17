@@ -209,6 +209,31 @@ export const walletAuthChallenges = pgTable(
   ]
 );
 
+export const authRateLimits = pgTable(
+  "auth_rate_limits",
+  {
+    scope: varchar("scope", { length: 64 }).notNull(),
+    keyDigest: varchar("key_digest", { length: 64 }).notNull(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull(),
+    windowExpiresAt: timestamp("window_expires_at", { withTimezone: true }).notNull(),
+    requestCount: integer("request_count").notNull()
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.scope, table.keyDigest],
+      name: "auth_rate_limits_scope_key_pk"
+    }),
+    index("auth_rate_limits_expiry_idx").on(table.windowExpiresAt),
+    check("auth_rate_limits_scope_format", sql`${table.scope} ~ '^[a-z][a-z0-9_:-]{0,63}$'`),
+    check("auth_rate_limits_key_digest_format", sql`${table.keyDigest} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "auth_rate_limits_window_valid",
+      sql`${table.windowExpiresAt} > ${table.windowStartedAt}`
+    ),
+    check("auth_rate_limits_count_positive", sql`${table.requestCount} > 0`)
+  ]
+);
+
 export const browserSessions = pgTable(
   "browser_sessions",
   {
@@ -686,6 +711,7 @@ export const apiIdempotencyKeys = pgTable(
 
 export const databaseSchema = {
   apiIdempotencyKeys,
+  authRateLimits,
   auditEvents,
   browserSessions,
   chainTransactions,

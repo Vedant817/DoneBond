@@ -1,3 +1,4 @@
+export * from "./auth-rate-limiter.js";
 export * from "./auth-repository.js";
 export * from "./client.js";
 export * from "./env.js";

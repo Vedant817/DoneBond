@@ -9,6 +9,7 @@ import postgres from "postgres";
 import {
   buildPostgresOptions,
   databaseSchema,
+  DrizzleAuthRateLimiter,
   DrizzleBrowserSessionStore,
   DrizzleWalletAccountResolver,
   DrizzleWalletChallengeStore,
@@ -52,7 +53,7 @@ test(
         FROM information_schema.tables
         WHERE table_schema = 'public'
       `;
-      assert.equal(tableCount, 15);
+      assert.equal(tableCount, 16);
 
       const requiredConstraints = [
         "tasks_policy_same_project_hash_fk",
@@ -60,7 +61,8 @@ test(
         "evidence_token_project_fk",
         "chain_transactions_replacement_scope_fk",
         "browser_sessions_wallet_user_fk",
-        "wallet_auth_challenges_nonce_digest_unique"
+        "wallet_auth_challenges_nonce_digest_unique",
+        "auth_rate_limits_scope_key_pk"
       ];
       const constraintRows = await client`
         SELECT conname
@@ -120,6 +122,31 @@ test(
         challenges.consume(challengeId, testOnlyNonceDigest, consumedAt)
       ]);
       assert.deepEqual(consumeResults.sort(), [false, true]);
+
+      const rateLimiter = new DrizzleAuthRateLimiter(database, {
+        scope: "wallet_challenge_ip",
+        maxAttempts: 3,
+        windowMs: 60_000
+      });
+      const rateKeyDigest = "9".repeat(64);
+      const rateResults = await Promise.all(
+        Array.from({ length: 12 }, () => rateLimiter.consume(rateKeyDigest, issuedAt))
+      );
+      assert.equal(rateResults.filter(Boolean).length, 3);
+      assert.equal(
+        await rateLimiter.consume(rateKeyDigest, new Date("2026-07-17T08:00:59.999Z")),
+        false
+      );
+      assert.equal(
+        await rateLimiter.consume(rateKeyDigest, new Date("2026-07-17T08:01:00.000Z")),
+        true
+      );
+      assert.equal(await rateLimiter.deleteExpired(new Date("2026-07-17T08:02:00.000Z"), 1), 1);
+      const [{ rateLimitCount }] = await client`
+        SELECT count(*)::int AS "rateLimitCount"
+        FROM auth_rate_limits
+      `;
+      assert.equal(rateLimitCount, 0);
 
       const sessions = new DrizzleBrowserSessionStore(database);
       const testOnlySessionDigest = "e".repeat(64);

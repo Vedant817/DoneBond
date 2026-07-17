@@ -15,6 +15,13 @@
       "when": 1784269964677,
       "tag": "0001_complex_pet_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784271861982,
+      "tag": "0002_dashing_pet_avengers",
+      "breakpoints": true
     }
   ]
 }
