@@ -6,12 +6,19 @@
   "exports": "./src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "node --enable-source-maps dist/migrate.js",
+    "test": "pnpm build && node --test test/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@donebond/shared": "workspace:*"
+    "@donebond/shared": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.9",
+    "zod": "4.4.3"
   },
   "devDependencies": {
+    "drizzle-kit": "0.31.10",
     "typescript": "catalog:"
   }
 }

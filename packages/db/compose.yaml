@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17.5-alpine3.22
+    environment:
+      POSTGRES_DB: donebond
+      POSTGRES_PASSWORD: donebond
+      POSTGRES_USER: donebond
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U donebond -d donebond"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    ports:
+      - "127.0.0.1:5432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
