@@ -196,6 +196,54 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
           windowMs: 10 * 60 * 1000
         })
       )
+    },
+    task_create: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "task_create_global",
+          maxAttempts: 300,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "task_create_subject",
+          maxAttempts: 30,
+          windowMs: 10 * 60 * 1000
+        })
+      )
+    },
+    task_chain_intent: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "task_intent_global",
+          maxAttempts: 600,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "task_intent_subject",
+          maxAttempts: 60,
+          windowMs: 10 * 60 * 1000
+        })
+      )
+    },
+    task_chain_register: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "task_transaction_global",
+          maxAttempts: 1200,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "task_transaction_subject",
+          maxAttempts: 120,
+          windowMs: 10 * 60 * 1000
+        })
+      )
     }
   });
   handlers = createAuthHandlers({

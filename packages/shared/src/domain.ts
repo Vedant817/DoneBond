@@ -294,7 +294,7 @@ export const ChainTransactionSchema = z.strictObject({
   fromAddress: NonZeroEthereumAddressSchema,
   toAddress: NonZeroEthereumAddressSchema,
   transactionHash: Bytes32Schema.nullable(),
-  nonce: z.number().int().nonnegative().nullable(),
+  nonce: DecimalWeiSchema.nullable(),
   status: ChainTransactionStatusSchema,
   blockNumber: DecimalWeiSchema.nullable(),
   failureCode: z.string().max(128).nullable(),

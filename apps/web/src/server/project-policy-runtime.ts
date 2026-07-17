@@ -89,6 +89,8 @@ export function translateProjectPolicyDatabaseError(
       });
     case "DB_INVALID_INPUT":
       throw error;
+    default:
+      throw error;
   }
 }
 

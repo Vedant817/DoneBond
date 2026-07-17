@@ -35,7 +35,13 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/u;
 const OPAQUE_PUBLIC_ID = /^[0-9a-hjkmnp-tv-z]{26}$/u;
 
 export type ProjectWriteOperation =
-  "project_create" | "project_update" | "policy_save" | "policy_activate";
+  | "project_create"
+  | "project_update"
+  | "policy_save"
+  | "policy_activate"
+  | "task_create"
+  | "task_chain_intent"
+  | "task_chain_register";
 
 export interface ProjectWriteRateLimiter {
   consume(operation: ProjectWriteOperation, subject: string | null, at: Date): Promise<boolean>;

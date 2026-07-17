@@ -155,6 +155,21 @@ export interface TaskCreatedEventInput {
   readonly confirmedAt: Date;
 }
 
+export interface TaskChainReconciliationContext {
+  readonly transactionPublicId: string;
+  readonly transactionHash: `0x${string}`;
+  readonly status: "submitted" | "unknown_reconcile";
+  readonly chainId: 143 | 10_143;
+  readonly contractAddress: string;
+  readonly taskPublicId: string;
+  readonly taskHash: string;
+  readonly policyHash: string;
+  readonly creatorWallet: string;
+  readonly assigneeWallet: string;
+  readonly rewardWei: string;
+  readonly deadlineUnixSeconds: string;
+}
+
 export interface WalletOutcomeInput {
   readonly taskPublicId: string;
   readonly transactionPublicId: string;
@@ -1414,6 +1429,347 @@ export class DrizzleTaskRepository {
           task: taskView(row),
           transaction: await this.chainView(transaction, chainTransaction, row.task.publicId)
         };
+      });
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  public async getTaskChainReconciliationContext(
+    transactionPublicId: string,
+    actorUserId: string
+  ): Promise<TaskChainReconciliationContext | null> {
+    assertPublicId(transactionPublicId, "Transaction public ID");
+    assertUuid(actorUserId);
+    try {
+      const [row] = await this.database
+        .select({
+          transaction: chainTransactions,
+          taskPublicId: tasks.publicId,
+          projectId: tasks.projectId,
+          taskHash: tasks.taskHash,
+          policyHash: tasks.policyHash,
+          creatorWallet: tasks.creatorWallet,
+          assigneeWallet: tasks.assigneeWallet,
+          rewardWei: tasks.rewardWei,
+          deadline: tasks.deadline,
+          canonicalJson: tasks.canonicalJson,
+          contractAddress: tasks.contractAddress,
+          chainId: tasks.chainId,
+          ownerUserId: projects.ownerUserId,
+          memberUserId: projectMembers.userId,
+          role: projectMembers.role
+        })
+        .from(chainTransactions)
+        .innerJoin(tasks, eq(tasks.id, chainTransactions.taskId))
+        .innerJoin(projects, eq(projects.id, chainTransactions.projectId))
+        .innerJoin(
+          projectMembers,
+          and(
+            eq(projectMembers.projectId, chainTransactions.projectId),
+            eq(projectMembers.userId, actorUserId)
+          )
+        )
+        .where(eq(chainTransactions.publicId, transactionPublicId))
+        .limit(1);
+      if (
+        !row ||
+        !row.transaction.taskId ||
+        row.transaction.userId !== actorUserId ||
+        row.role !== "owner" ||
+        row.ownerUserId !== row.memberUserId
+      ) {
+        return null;
+      }
+      if (
+        row.transaction.status !== "submitted" &&
+        row.transaction.status !== "unknown_reconcile"
+      ) {
+        return null;
+      }
+      if (row.transaction.transactionHash === null) return null;
+      const canonical = CanonicalTaskV1Schema.parse(row.canonicalJson);
+      assertChainId(row.chainId);
+      assertChainId(row.transaction.chainId);
+      return {
+        transactionPublicId: row.transaction.publicId,
+        transactionHash: row.transaction.transactionHash as `0x${string}`,
+        status: row.transaction.status as "submitted" | "unknown_reconcile",
+        chainId: row.transaction.chainId,
+        contractAddress: row.contractAddress,
+        taskPublicId: row.taskPublicId,
+        taskHash: row.taskHash,
+        policyHash: row.policyHash,
+        creatorWallet: row.creatorWallet,
+        assigneeWallet: row.assigneeWallet,
+        rewardWei: row.rewardWei.toString(),
+        deadlineUnixSeconds:
+          canonical.deadlineUnixSeconds === null ? "0" : canonical.deadlineUnixSeconds
+      };
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  public async markTransactionUnknown(input: {
+    readonly transactionPublicId: string;
+    readonly expectedStatus: "wallet_requested" | "submitted" | "unknown_reconcile";
+    readonly failureCode: string;
+    readonly reconciledAt: Date;
+  }): Promise<ChainTransactionView | null> {
+    assertPublicId(input.transactionPublicId, "Transaction public ID");
+    assertDate(input.reconciledAt, "Reconciliation time");
+    if (!/^[A-Z][A-Z0-9_]{0,99}$/u.test(input.failureCode)) {
+      throw invalid("Reconciliation failure code is invalid");
+    }
+    try {
+      return await this.database.transaction(async (transaction) => {
+        const [row] = await transaction
+          .select()
+          .from(chainTransactions)
+          .where(eq(chainTransactions.publicId, input.transactionPublicId))
+          .for("update")
+          .limit(1);
+        if (!row || !row.taskId) throw notFound();
+        if (row.status === "unknown_reconcile" && row.failureCode === input.failureCode) {
+          const [task] = await transaction
+            .select({ publicId: tasks.publicId })
+            .from(tasks)
+            .where(eq(tasks.id, row.taskId))
+            .limit(1);
+          if (!task) throw notFound();
+          return this.chainView(transaction, row, task.publicId);
+        }
+        if (row.status !== input.expectedStatus) throw conflict("Chain transaction state changed");
+        const [updated] = await transaction
+          .update(chainTransactions)
+          .set({
+            status: "unknown_reconcile",
+            failureCode: input.failureCode,
+            updatedAt: input.reconciledAt
+          })
+          .where(eq(chainTransactions.id, row.id))
+          .returning();
+        if (!updated) throw conflict("Unknown reconciliation update lost a race");
+        const [task] = await transaction
+          .select({ publicId: tasks.publicId })
+          .from(tasks)
+          .where(eq(tasks.id, row.taskId))
+          .limit(1);
+        if (!task) throw notFound();
+        await transaction.insert(auditEvents).values({
+          projectId: row.projectId,
+          taskId: row.taskId,
+          action: "chain.unknown_reconcile",
+          metadataSafeJson: {
+            transactionPublicId: row.publicId,
+            failureCode: input.failureCode
+          }
+        });
+        return this.chainView(transaction, updated, task.publicId);
+      });
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  public async markTransactionReverted(input: {
+    readonly transactionPublicId: string;
+    readonly expectedStatus: "submitted" | "unknown_reconcile";
+    readonly blockHash: string;
+    readonly blockNumber: bigint;
+    readonly reconciledAt: Date;
+  }): Promise<ChainTransactionView | null> {
+    assertPublicId(input.transactionPublicId, "Transaction public ID");
+    assertDate(input.reconciledAt, "Reconciliation time");
+    if (!/^0x[0-9a-f]{64}$/u.test(input.blockHash)) {
+      throw invalid("Revert block hash must be a 32-byte lowercase hex value");
+    }
+    if (input.blockNumber < 0n) throw invalid("Revert block number must be non-negative");
+    try {
+      return await this.database.transaction(async (transaction) => {
+        const [row] = await transaction
+          .select()
+          .from(chainTransactions)
+          .where(eq(chainTransactions.publicId, input.transactionPublicId))
+          .for("update")
+          .limit(1);
+        if (!row || !row.taskId) throw notFound();
+        if (row.status === "reverted" && row.blockNumber === input.blockNumber) {
+          const [task] = await transaction
+            .select({ publicId: tasks.publicId })
+            .from(tasks)
+            .where(eq(tasks.id, row.taskId))
+            .limit(1);
+          if (!task) throw notFound();
+          return this.chainView(transaction, row, task.publicId);
+        }
+        if (row.status !== input.expectedStatus) throw conflict("Chain transaction state changed");
+        if (row.transactionHash === null) {
+          throw invalid("A transaction without a hash cannot be marked reverted");
+        }
+        const [updated] = await transaction
+          .update(chainTransactions)
+          .set({
+            status: "reverted",
+            blockNumber: input.blockNumber,
+            failureCode: "TRANSACTION_REVERTED",
+            updatedAt: input.reconciledAt
+          })
+          .where(eq(chainTransactions.id, row.id))
+          .returning();
+        if (!updated) throw conflict("Reverted reconciliation update lost a race");
+        const [task] = await transaction
+          .select({ publicId: tasks.publicId })
+          .from(tasks)
+          .where(eq(tasks.id, row.taskId))
+          .limit(1);
+        if (!task) throw notFound();
+        await transaction.insert(auditEvents).values({
+          projectId: row.projectId,
+          taskId: row.taskId,
+          action: "chain.reverted",
+          metadataSafeJson: {
+            transactionPublicId: row.publicId,
+            transactionHash: row.transactionHash,
+            blockNumber: input.blockNumber.toString()
+          }
+        });
+        return this.chainView(transaction, updated, task.publicId);
+      });
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  public async confirmTaskCreatedFromReconciliation(input: {
+    readonly transactionPublicId: string;
+    readonly expectedStatus: "submitted" | "unknown_reconcile";
+    readonly chainTaskId: bigint;
+    readonly blockHash: string;
+    readonly blockNumber: bigint;
+    readonly logIndex: number;
+    readonly reconciledAt: Date;
+  }): Promise<ChainTransactionView | null> {
+    assertPublicId(input.transactionPublicId, "Transaction public ID");
+    assertDate(input.reconciledAt, "Reconciliation time");
+    if (input.chainTaskId < 0n) throw invalid("Chain task ID must be non-negative");
+    if (!/^0x[0-9a-f]{64}$/u.test(input.blockHash)) {
+      throw invalid("Confirmed block hash must be a 32-byte lowercase hex value");
+    }
+    if (input.blockNumber < 0n) throw invalid("Confirmed block number must be non-negative");
+    if (!Number.isSafeInteger(input.logIndex) || input.logIndex < 0) {
+      throw invalid("Confirmed log index must be a non-negative safe integer");
+    }
+    try {
+      return await this.database.transaction(async (transaction) => {
+        const [chainRow] = await transaction
+          .select()
+          .from(chainTransactions)
+          .where(eq(chainTransactions.publicId, input.transactionPublicId))
+          .for("update")
+          .limit(1);
+        if (!chainRow || !chainRow.taskId) throw notFound();
+        const [taskRow] = await transaction
+          .select({
+            task: tasks,
+            projectPublicId: projects.publicId,
+            repositoryUrl: projects.repositoryUrl,
+            policyPublicId: policies.publicId
+          })
+          .from(tasks)
+          .innerJoin(projects, eq(projects.id, tasks.projectId))
+          .innerJoin(policies, eq(policies.id, tasks.policyId))
+          .where(eq(tasks.id, chainRow.taskId))
+          .for("update")
+          .limit(1);
+        if (!taskRow) throw notFound();
+        if (chainRow.status === "confirmed" && taskRow.task.chainTaskId === input.chainTaskId) {
+          return this.chainView(transaction, chainRow, taskRow.task.publicId);
+        }
+        if (chainRow.status !== input.expectedStatus) {
+          throw conflict("Chain transaction state changed");
+        }
+        if (chainRow.transactionHash === null) {
+          throw invalid("A transaction without a hash cannot be confirmed");
+        }
+        const existingEvent = await transaction
+          .select({ id: contractEvents.id })
+          .from(contractEvents)
+          .where(
+            and(
+              eq(contractEvents.chainId, chainRow.chainId),
+              eq(contractEvents.transactionHash, chainRow.transactionHash),
+              eq(contractEvents.logIndex, input.logIndex)
+            )
+          )
+          .for("update")
+          .limit(1);
+        if (existingEvent.length > 0) {
+          throw conflict("TaskCreated event already indexed for this transaction and log index");
+        }
+        const canonical = CanonicalTaskV1Schema.parse(taskRow.task.canonicalJson);
+        await transaction.insert(contractEvents).values({
+          chainId: chainRow.chainId,
+          contractAddress: taskRow.task.contractAddress,
+          transactionHash: chainRow.transactionHash,
+          logIndex: input.logIndex,
+          eventName: "TaskCreated",
+          decodedJson: {
+            taskId: input.chainTaskId.toString(),
+            creator: taskRow.task.creatorWallet,
+            assignee: taskRow.task.assigneeWallet,
+            taskHash: taskRow.task.taskHash,
+            policyHash: taskRow.task.policyHash,
+            reward: taskRow.task.rewardWei.toString(),
+            deadline: canonical.deadlineUnixSeconds === null ? "0" : canonical.deadlineUnixSeconds
+          },
+          blockHash: input.blockHash,
+          blockNumber: input.blockNumber,
+          removed: false
+        });
+        const [confirmedTransaction] = await transaction
+          .update(chainTransactions)
+          .set({
+            status: "confirmed",
+            blockNumber: input.blockNumber,
+            failureCode: null,
+            updatedAt: input.reconciledAt
+          })
+          .where(eq(chainTransactions.id, chainRow.id))
+          .returning();
+        const [confirmedTask] = await transaction
+          .update(tasks)
+          .set({
+            chainTaskId: input.chainTaskId,
+            offchainStatus: "open",
+            chainStatus: "open",
+            updatedAt: input.reconciledAt
+          })
+          .where(eq(tasks.id, taskRow.task.id))
+          .returning();
+        if (!confirmedTransaction || !confirmedTask) {
+          throw conflict("Confirmation update lost a race");
+        }
+        await transaction.insert(auditEvents).values([
+          {
+            projectId: taskRow.task.projectId,
+            taskId: taskRow.task.id,
+            action: "chain.confirmed",
+            metadataSafeJson: {
+              transactionPublicId: chainRow.publicId,
+              transactionHash: chainRow.transactionHash,
+              blockNumber: input.blockNumber.toString()
+            }
+          },
+          {
+            projectId: taskRow.task.projectId,
+            taskId: taskRow.task.id,
+            action: "task.opened",
+            metadataSafeJson: { chainTaskId: input.chainTaskId.toString() }
+          }
+        ]);
+        return this.chainView(transaction, confirmedTransaction, confirmedTask.publicId);
       });
     } catch (error) {
       throw translateDatabaseError(error);

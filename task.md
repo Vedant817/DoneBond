@@ -253,13 +253,13 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 - [x] Repository metadata validation.
 - [x] Idempotent writes and stable errors.
 
-## 4.5 Tasks API
+## 4.5 Tasks API — COMPLETE
 
-- [ ] Create task draft with canonical `taskHash` and policy binding.
-- [ ] Validate assignee, deadline, reward, and supported network.
-- [ ] Create chain transaction intent.
-- [ ] Persist submitted transaction hash and reconcile confirmation/event.
-- [ ] Handle wallet rejection, replacement, revert, and unknown status.
+- [x] Create task draft with canonical `taskHash` and policy binding.
+- [x] Validate assignee, deadline, reward, and supported network.
+- [x] Create chain transaction intent.
+- [x] Persist submitted transaction hash and reconcile confirmation/event.
+- [x] Handle wallet rejection, replacement, revert, and unknown status.
 
 ## 4.6 Evidence API
 
@@ -771,3 +771,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Idempotency rows store strict allowlisted safe response snapshots/status, never internal UUIDs, raw YAML, canonical policy payloads, or credentials; policy replay rehydrates canonical JSON only from the immutable project-bound policy row after owner authorization. SQL pagination is bounded to 100 and uses `(created_at, public_id)` keysets. Create/update/policy/activation quotas use separate HMACed durable scopes. Private repositories and canonical policies remain member-only.
 - Remaining risks/blockers: The guarded migration/concurrency/temporal PostgreSQL test could not run because no Docker/PostgreSQL daemon or `TEST_DATABASE_URL` is available. The exported legacy `DoneBondRepository.createProject` has no production caller and lacks response-snapshot semantics; production web code uses only `DrizzleProjectPolicyRepository`, and the legacy method should be delegated or removed before any future service adopts it. Fixed-window `429` responses still omit `Retry-After` and deployment should add edge/IP controls.
 - Commit: API integration `619955ecd9630e7f370caaa40bf3f2a1e779a55e`; DB foundation `4a29bb2`, response-snapshot/keyset remediation `da3b61e`.
+
+## 2026-07-18 14:40 IST — OpenCode/coordinator — 4.5 (complete)
+- Branch/worktree: `main`
+- Summary: Completed the task lifecycle API vertical slice. Implemented `task-runtime.ts` dispatcher wiring `DrizzleTaskRepository` + `MonadTaskReceiptProvider` to `createTaskHandlers`. Added reconciliation store adapter methods (`getTaskChainReconciliationContext`, `markTransactionUnknown`, `markTransactionReverted`, `confirmTaskCreatedFromReconciliation`) to `DrizzleTaskRepository`. Added route handlers for task create, chain intent, wallet outcome, replacement, reconciliation, and read. Added input validation with contract-bound field normalization. Added receipt provider for Monad RPC that preserves authoritative receipt and log fields. All 69 web tests pass, 66/67 DB tests pass (1 skipped PostgreSQL), 22 CLI tests, 36 evidence, 16 shared.
+- Files changed: `apps/web/src/server/task-runtime.ts` (new), `apps/web/src/server/task-handlers.ts` (new), `apps/web/src/server/task-handlers.test.ts` (new), `apps/web/src/server/task-input.ts` (new), `apps/web/src/server/task-input.test.ts` (new), `apps/web/src/server/task-receipt-provider.ts` (new), `apps/web/src/server/task-receipt-provider.test.ts` (new), `apps/web/src/server/task-reconciliation.ts` (new), `apps/web/src/server/task-reconciliation.test.ts` (new), `packages/db/src/task-chain-repository.ts` (modified), `packages/db/test/task-chain-repository.test.mjs` (modified), `packages/shared/src/domain.ts` (modified), `packages/shared/src/errors.ts` (modified), route files under `apps/web/src/app/api/v1/projects/[projectId]/tasks/`, `apps/web/src/app/api/v1/tasks/[taskId]/`, `apps/web/src/app/api/v1/chain/reconcile/[transactionId]/`, plus minor fixes to `project-policy-runtime.ts`, `auth-runtime.ts`, `project-write-rate-limiter.test.ts`, `project-policy-handlers.ts`.
+- Verification commands: `pnpm typecheck` (6/6), `pnpm lint` (0 errors, boundaries OK), `pnpm format:check` (all clean), `pnpm test` (11/11 suites, shared 16, evidence 36, db 66/67, cli 22, web 69).
+- Results: All gates pass. Task API routes compile as dynamic Node routes with production build: `/api/v1/projects/[projectId]/tasks`, `/api/v1/tasks/[taskId]`, `/api/v1/tasks/[taskId]/chain-intent`, `/api/v1/tasks/[taskId]/chain-transactions`, `/api/v1/chain/reconcile/[transactionId]`.
+- Security/privacy notes: Task creation validates project ownership, policy binding, supported networks, and canonical hashes server-side. Chain intent persists before wallet use and is replay-safe. Wallet outcome rejects browser-confirmed states. Reconciliation hides unknown transactions behind auth boundary. Receipt provider never exposes RPC credentials.
+- Remaining risks/blockers: Push blocked by SSH key issue. Real PostgreSQL and Monad RPC not available for integration tests. Contract not deployed. UI work (Milestone 6) not started.
+- Commit: TBD (pending commit)

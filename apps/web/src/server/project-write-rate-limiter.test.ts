@@ -30,7 +30,10 @@ test("project write limits use separate operation and global/subject stores", as
     project_create: pair("project_create"),
     project_update: pair("project_update"),
     policy_save: pair("policy_save"),
-    policy_activate: pair("policy_activate")
+    policy_activate: pair("policy_activate"),
+    task_create: pair("task_create"),
+    task_chain_intent: pair("task_chain_intent"),
+    task_chain_register: pair("task_chain_register")
   });
   const at = new Date("2026-07-17T14:00:00.000Z");
   assert.equal(await limiter.consume("project_create", null, at), true);

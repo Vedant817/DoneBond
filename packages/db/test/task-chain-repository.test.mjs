@@ -6,7 +6,6 @@ import { DatabaseServiceError, DrizzleTaskRepository } from "../dist/index.js";
 const VALID_PUBLIC_ID = "01arz3ndektsv4rrffq69g5fav";
 const VALID_UUID = "018f4f6c-5b5a-4b4f-8a8b-7d3d6f95e001";
 const HASH = `0x${"ab".repeat(32)}`;
-const ADDRESS = `0x${"12".repeat(20)}`;
 const NOW = new Date("2026-07-17T14:00:00.000Z");
 const IDEMPOTENCY_KEY = "task-key-0123456789abcdef";
 
