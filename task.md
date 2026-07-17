@@ -223,11 +223,11 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 4.1 Database foundation
 
-- [-] Implement Drizzle schema and migrations for all MVP entities. (Database engineer, `feat/database-foundation`.)
-- [ ] Add constraints and indexes for public IDs, chain logs, idempotency, and normalized wallets.
-- [ ] Add typed repository/service layer.
-- [ ] Add local database development setup.
-- [ ] Seed only explicit development fixtures; never seed production success data.
+- [!] Implement Drizzle schema and migrations for all MVP entities. (Code and guarded integration test complete; live disposable PostgreSQL run blocked by unavailable local daemon.)
+- [!] Add constraints and indexes for public IDs, chain logs, idempotency, and normalized wallets. (Defined and migration-inspected; live PostgreSQL enforcement run pending.)
+- [x] Add typed repository/service layer.
+- [x] Add local database development setup.
+- [x] Seed only explicit development fixtures; never seed production success data.
 
 ## 4.2 Authentication and authorization
 
@@ -701,3 +701,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Validation never executes a policy command. Existing realpath containment, strict schema, duplicate-key rejection, shell-wrapper rejection, and safe error rendering remain authoritative. A delegated review attempt was unavailable, so the primary reran focused acceptance and workspace gates directly.
 - Remaining risks/blockers: Task pull, command execution/evidence generation, upload, and independent receipt verification remain tasks 5.4–5.7.
 - Commit: `1f8025f755e8c48122152713dded93b06b8c72a0`.
+
+## 2026-07-17 11:48 IST — Database engineer + two independent reviews + Codex/integrator — 4.1 (partial)
+- Branch/worktree: `feat/database-foundation` in `/Users/salescode/Documents/Code/DoneBond-backend`, integrated to `main`.
+- Summary: Added the complete Drizzle/PostgreSQL MVP schema, generated migration, certificate-verified connection configuration, local Compose workflow, typed transactional repository, exact shared lifecycle enums, cross-project composite integrity, member-scoped reads, atomic audit/idempotency bindings, strict evidence-policy check matching, audited reorg handling, and replacement-safe chain transaction transitions.
+- Files changed: `packages/db/**`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, manifest, and tracker.
+- Verification commands: frozen install; DB build/typecheck/test; package consumer import from `apps/web`; Drizzle generation freshness; Compose configuration; root lint/format/boundaries; tracked/history secret scan; independent false-evidence, actor-scope, reorg, replacement, and package-runtime reproductions.
+- Results: DB suite passed 23/23 deterministic tests with one guarded real-PostgreSQL integration test skipped. Built `@donebond/db` imports successfully from a consumer. Frozen install now passes with reviewed Drizzle/Postgres dependencies. The two review rounds found false policy completeness, caller-controlled actor scope, invalid runtime exports, and replacement bypasses; all have regression coverage and no critical/high code finding remains.
+- Security/privacy notes: TLS requires certificate validation and optionally a private CA; disabling TLS is loopback-only. Tokens persist only as exact lowercase 64-hex digests. State-changing resources, idempotency bindings, and audit entries share transactions. `esbuild` lifecycle scripts are explicitly allowed because three locked versions are required by the reviewed `drizzle-kit` development toolchain; no production runtime depends on Drizzle Kit.
+- Remaining risks/blockers: The guarded migration/constraint integration test must run against an explicitly confirmed disposable database ending in `_test`. Docker/OrbStack and local PostgreSQL are unavailable in this environment, so schema execution, rollback, and concurrency behavior are not yet claimed and the first two 4.1 items remain blocked rather than done.
+- Commit: foundation `a17e911`; integrity remediation `a661b18`; replacement hardening `5a6ff30`; lock/toolchain integration recorded by the following coordinator commit.
