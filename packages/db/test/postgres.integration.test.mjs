@@ -13,6 +13,7 @@ import {
   DrizzleAuthRateLimiter,
   DrizzleBrowserSessionStore,
   DrizzleCliTokenRepository,
+  DrizzleProjectPolicyRepository,
   DrizzleWalletAccountResolver,
   DrizzleWalletChallengeStore,
   parseDatabaseEnvironment
@@ -137,6 +138,231 @@ test(
       assert.equal(
         await repository.findProjectAccess("01arz3ndektsv4rrffq69g5fay", crossProjectUserId),
         null
+      );
+
+      const projectPolicyRepository = new DrizzleProjectPolicyRepository(database);
+      const managedProjectPublicId = "01arz3ndektsv4rrffq69g5faz";
+      const managedPolicyPublicId = "01arz3ndektsv4rrffq69g5fap";
+      const managedPolicyHash = `0x${"a".repeat(64)}`;
+      const idempotency = (operation, key, requestHash) => ({
+        actorScope: `user:${userId}`,
+        operation,
+        idempotencyKey: key,
+        requestHash,
+        expiresAt: new Date("2030-01-01T00:00:00.000Z")
+      });
+      const managedProjectInput = {
+        actorUserId: userId,
+        publicId: managedProjectPublicId,
+        slug: "repository-integration",
+        name: "Repository integration",
+        repositoryUrl: "https://example.test/owner/repository-integration.git",
+        defaultBranch: "main",
+        visibility: "private"
+      };
+      const projectCreateIdempotency = idempotency(
+        "project_create",
+        "integration-project-create",
+        `0x${"1".repeat(64)}`
+      );
+      const managedProject = await projectPolicyRepository.createProject(
+        managedProjectInput,
+        projectCreateIdempotency
+      );
+      assert.equal(managedProject.publicId, managedProjectPublicId);
+      assert.equal("id" in managedProject, false);
+      assert.deepEqual(
+        await projectPolicyRepository.createProject(managedProjectInput, projectCreateIdempotency),
+        managedProject
+      );
+      assert.equal(
+        (await projectPolicyRepository.findProject(managedProjectPublicId, userId))?.role,
+        "owner"
+      );
+      assert.equal(
+        await projectPolicyRepository.findProject(managedProjectPublicId, memberUserId),
+        null
+      );
+      await assert.rejects(
+        projectPolicyRepository.createProject(
+          { ...managedProjectInput, publicId: "01arz3ndektsv4rrffq69g5faq" },
+          idempotency("project_create", "integration-project-slug-conflict", `0x${"2".repeat(64)}`)
+        ),
+        (error) => error.code === "DB_PROJECT_SLUG_CONFLICT"
+      );
+
+      const managedPolicyInput = {
+        actorUserId: userId,
+        projectPublicId: managedProjectPublicId,
+        policyPublicId: managedPolicyPublicId,
+        schemaVersion: 7,
+        canonicalJson: {
+          kind: "donebond.policy",
+          schemaVersion: 7,
+          checks: [{ command: "pnpm", args: ["test"], required: true }]
+        },
+        policyHash: managedPolicyHash,
+        sourcePath: ".donebond/policy.json",
+        activate: true,
+        activatedAt: new Date("2026-07-17T09:00:00.000Z")
+      };
+      const policyCreateIdempotency = idempotency(
+        "policy_create",
+        "integration-policy-create",
+        `0x${"3".repeat(64)}`
+      );
+      const managedPolicy = await projectPolicyRepository.createPolicyVersion(
+        managedPolicyInput,
+        policyCreateIdempotency
+      );
+      assert.equal(managedPolicy.active, true);
+      assert.equal(managedPolicy.schemaVersion, 7);
+      assert.deepEqual(
+        (
+          await projectPolicyRepository.findPolicyVersion(
+            managedProjectPublicId,
+            managedPolicyPublicId,
+            userId
+          )
+        )?.canonicalJson,
+        managedPolicyInput.canonicalJson
+      );
+      assert.equal(
+        (await projectPolicyRepository.findProject(managedProjectPublicId, userId))
+          ?.activePolicyHash,
+        managedPolicyHash
+      );
+      assert.deepEqual(
+        await projectPolicyRepository.createPolicyVersion(
+          managedPolicyInput,
+          policyCreateIdempotency
+        ),
+        managedPolicy
+      );
+      assert.equal(
+        (
+          await projectPolicyRepository.createPolicyVersion(
+            managedPolicyInput,
+            idempotency("policy_create", "integration-policy-existing", `0x${"4".repeat(64)}`)
+          )
+        ).publicId,
+        managedPolicyPublicId
+      );
+      await assert.rejects(
+        projectPolicyRepository.createPolicyVersion(
+          { ...managedPolicyInput, policyPublicId: "01arz3ndektsv4rrffq69g5far", activate: false },
+          idempotency("policy_create", "integration-policy-hash-conflict", `0x${"5".repeat(64)}`)
+        ),
+        (error) => error.code === "DB_POLICY_HASH_CONFLICT"
+      );
+      await assert.rejects(
+        projectPolicyRepository.createPolicyVersion(
+          {
+            ...managedPolicyInput,
+            actorUserId: memberUserId,
+            policyPublicId: "01arz3ndektsv4rrffq69g5fas",
+            policyHash: `0x${"b".repeat(64)}`,
+            activate: false
+          },
+          {
+            ...idempotency("policy_create", "integration-policy-member", `0x${"6".repeat(64)}`),
+            actorScope: `user:${memberUserId}`
+          }
+        ),
+        (error) => error.code === "DB_NOT_FOUND"
+      );
+      const history = await projectPolicyRepository.listPolicyVersions(
+        managedProjectPublicId,
+        userId
+      );
+      assert.equal(history?.length, 1);
+      assert.equal(history?.[0].active, true);
+
+      const concurrentPolicyHash = `0x${"d".repeat(64)}`;
+      const concurrentPolicyResults = await Promise.allSettled([
+        projectPolicyRepository.createPolicyVersion(
+          {
+            ...managedPolicyInput,
+            policyPublicId: "01arz3ndektsv4rrffq69g5fau",
+            policyHash: concurrentPolicyHash,
+            activate: false
+          },
+          idempotency("policy_create", "integration-policy-race-a", `0x${"a".repeat(64)}`)
+        ),
+        projectPolicyRepository.createPolicyVersion(
+          {
+            ...managedPolicyInput,
+            policyPublicId: "01arz3ndektsv4rrffq69g5fav",
+            policyHash: concurrentPolicyHash,
+            activate: false
+          },
+          idempotency("policy_create", "integration-policy-race-b", `0x${"b".repeat(64)}`)
+        )
+      ]);
+      assert.equal(
+        concurrentPolicyResults.filter((result) => result.status === "fulfilled").length,
+        1
+      );
+      const concurrentPolicyRejection = concurrentPolicyResults.find(
+        (result) => result.status === "rejected"
+      );
+      assert.equal(concurrentPolicyRejection?.reason.code, "DB_POLICY_HASH_CONFLICT");
+
+      const [managedIds] = await client`
+        SELECT p.id AS project_id, policy.id AS policy_id
+        FROM projects p
+        JOIN policies policy ON policy.project_id = p.id
+        WHERE p.public_id = ${managedProjectPublicId}
+          AND policy.public_id = ${managedPolicyPublicId}
+      `;
+      await client`
+        INSERT INTO tasks (
+          project_id, public_id, policy_id, chain_id, contract_address, title, description,
+          acceptance_criteria_json, task_hash, policy_hash, creator_wallet, assignee_wallet
+        ) VALUES (
+          ${managedIds.project_id}, '01arz3ndektsv4rrffq69g5fat', ${managedIds.policy_id}, 10143,
+          ${`0x${"1".repeat(40)}`}, 'Immutable repository task', 'Integration task',
+          ${client.json([{ text: "Tests pass" }])}, ${`0x${"c".repeat(64)}`},
+          ${managedPolicyHash}, ${`0x${"2".repeat(40)}`}, ${`0x${"3".repeat(40)}`}
+        )
+      `;
+      await assert.rejects(
+        projectPolicyRepository.updateProject(
+          {
+            actorUserId: userId,
+            projectPublicId: managedProjectPublicId,
+            changedAt: new Date("2026-07-17T09:01:00.000Z"),
+            repositoryUrl: "https://example.test/owner/changed.git"
+          },
+          idempotency(
+            "project_update",
+            "integration-project-repository-change",
+            `0x${"7".repeat(64)}`
+          )
+        ),
+        (error) => error.code === "DB_REPOSITORY_IMMUTABLE"
+      );
+      const archived = await projectPolicyRepository.updateProject(
+        {
+          actorUserId: userId,
+          projectPublicId: managedProjectPublicId,
+          changedAt: new Date("2026-07-17T09:02:00.000Z"),
+          status: "archived"
+        },
+        idempotency("project_update", "integration-project-archive", `0x${"8".repeat(64)}`)
+      );
+      assert.equal(archived.status, "archived");
+      await assert.rejects(
+        projectPolicyRepository.activatePolicy(
+          {
+            actorUserId: userId,
+            projectPublicId: managedProjectPublicId,
+            policyPublicId: managedPolicyPublicId,
+            activatedAt: new Date("2026-07-17T09:03:00.000Z")
+          },
+          idempotency("policy_activate", "integration-policy-archived", `0x${"9".repeat(64)}`)
+        ),
+        (error) => error.code === "DB_PROJECT_ARCHIVED"
       );
       const cliTokenRepository = new DrizzleCliTokenRepository(database);
       const cliTokenTestStartedAt = new Date();

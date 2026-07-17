@@ -231,13 +231,13 @@ export class DoneBondRepository {
     try {
       return await this.database.transaction(async (transaction) => {
         const [project] = await transaction
-          .select({ id: projects.id })
+          .select({ id: projects.id, ownerUserId: projects.ownerUserId, status: projects.status })
           .from(projects)
           .where(eq(projects.id, input.projectId))
           .for("update")
           .limit(1);
         const [membership] = await transaction
-          .select({ userId: projectMembers.userId })
+          .select({ role: projectMembers.role, userId: projectMembers.userId })
           .from(projectMembers)
           .where(
             and(
@@ -247,7 +247,15 @@ export class DoneBondRepository {
           )
           .for("share")
           .limit(1);
-        if (!project || !membership) throw invalid("Policy project or membership does not exist");
+        if (
+          !project ||
+          !membership ||
+          project.status !== "active" ||
+          membership.role !== "owner" ||
+          project.ownerUserId !== membership.userId
+        ) {
+          throw new DatabaseServiceError("DB_NOT_FOUND", "Policy project was not found");
+        }
         const reserved = await transaction
           .insert(apiIdempotencyKeys)
           .values({ ...idempotency, resourcePublicId: input.publicId })

@@ -56,6 +56,23 @@ test("unique violations become stable errors without leaking constraint details"
   assert.doesNotMatch(translated.message, /email|sensitive/i);
 });
 
+test("project slug and policy hash constraints have handler-safe conflict codes", () => {
+  const cases = [
+    ["projects_owner_slug_unique", "DB_PROJECT_SLUG_CONFLICT"],
+    ["policies_project_hash_unique", "DB_POLICY_HASH_CONFLICT"]
+  ];
+  for (const [constraint_name, code] of cases) {
+    const translated = translateDatabaseError(
+      Object.assign(new Error("duplicate detail must not escape"), {
+        code: "23505",
+        constraint_name
+      })
+    );
+    assert.equal(translated.code, code);
+    assert.doesNotMatch(translated.message, /duplicate detail/);
+  }
+});
+
 test("idempotency conflicts have a distinct stable code", () => {
   const error = new DatabaseServiceError(
     "DB_IDEMPOTENCY_CONFLICT",
