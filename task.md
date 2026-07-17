@@ -295,18 +295,18 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 5.1 CLI skeleton
 
-- [-] Package executable as `donebond`. (CLI engineer, `feat/cli-foundation`.)
-- [ ] Add version/help/error conventions.
-- [ ] Add structured nonzero exit codes.
-- [ ] Ensure secrets never appear in debug logs.
+- [x] Package executable as `donebond`.
+- [x] Add version/help/error conventions.
+- [x] Add structured nonzero exit codes.
+- [x] Ensure secrets never appear in debug logs.
 
 ## 5.2 `donebond init`
 
-- [ ] Discover repository.
-- [ ] Generate policy template without overwriting existing file.
-- [ ] Ask for API URL/project ID/token through safe input.
-- [ ] Store configuration with restrictive permissions where supported.
-- [ ] Validate connection.
+- [x] Discover repository.
+- [x] Generate policy template without overwriting existing file.
+- [x] Ask for API URL/project ID/token through safe input.
+- [x] Store configuration with restrictive permissions where supported.
+- [x] Validate connection.
 
 ## 5.3 `donebond policy validate`
 
@@ -681,3 +681,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Author/committer identities and absolute local paths remain outside the public bundle. Raw V1 bundles retain normalized repository identity and changed path names, so a future public API must deny raw downloads for private projects or use a separately specified safe projection. EvidenceBundleV1 cannot encode repository-constraint failure outcomes; branch/remote violations therefore refuse bundle creation and base ancestry requires trusted local context.
 - Remaining risks/blockers: One unrelated moderate PostCSS production advisory remains below the critical audit gate. Public/private bundle access control is required in task 4.7. Live chain anchoring remains blocked by the documented task 3.5 deployment credentials/network prerequisites.
 - Commit: `c0fe96d52f4cc3afde89c5c9bd03c10bc3e4e9c0`.
+
+## 2026-07-17 11:20 IST — CLI engineer + independent reviewer + Codex/integrator — 5.1–5.2
+- Branch/worktree: `feat/cli-foundation` in `/Users/salescode/Documents/Code/DoneBond-cli`, integrated to `main`.
+- Summary: Added the `donebond` executable with stable human/JSON help, version, errors, and exit codes; repository discovery; safe policy initialization; explicit offline mode; bounded hidden/stdin token input; real API project validation; and configuration stored outside the repository with restrictive permissions and symlink/ownership checks.
+- Files changed: `apps/cli/**`.
+- Verification commands: CLI build/typecheck/test; root format/lint/boundaries; `git diff --check`; tracked/history secret scan; identity checker; independent adversarial review with invalid HTTP 200, oversized response, mismatched project, failed-init rollback, and symlinked XDG root reproductions.
+- Results: CLI suite passed 10/10 after integration. Invalid/non-normalized project IDs, HTML or mismatched/oversized successful responses, unsafe config roots, symlink targets, overwrite without force, non-Git directories, and conflicting options fail closed. Failed online validation creates no `.donebond` directory. Current tracked secret scan passed 180 files. No critical/high finding remains.
+- Security/privacy notes: Tokens are never accepted on argv, never printed, and persist only at mode 0600 beneath mode 0700 directories on supported POSIX systems. API URLs reject credentials, query, fragments, and insecure non-local transport. Portable Node filesystem APIs cannot eliminate every TOCTOU race, so ownership, symlink, and permission checks are repeated immediately around operations.
+- Remaining risks/blockers: The local config uses OS filesystem protection rather than a platform keychain; a keychain backend is a post-MVP hardening option. Remaining CLI verification, upload, receipt, and distribution commands are tasks 5.3–5.8.
+- Commit: `f9a3b9925f508c3b4f53f11868663f800d912f05`.
