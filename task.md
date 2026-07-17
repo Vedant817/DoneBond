@@ -104,60 +104,60 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 2.1 Policy schema
 
-- [-] Implement YAML policy parser using a strict schema. (Evidence engineer, `feat/evidence-engine`.)
-- [ ] Define executable, args, cwd, timeout, required flag, output limits, environment allowlist, and redaction patterns.
-- [ ] Reject unknown fields unless intentionally allowed by a versioned extension mechanism.
-- [ ] Reject paths outside repository root.
-- [ ] Reject shell wrappers and unsafe executable definitions.
-- [ ] Produce actionable validation errors with file/field context.
-- [ ] Canonicalize policy and derive `policyHash`.
+- [x] Implement YAML policy parser using a strict schema.
+- [x] Define executable, args, cwd, timeout, required flag, output limits, environment allowlist, and redaction patterns.
+- [x] Reject unknown fields unless intentionally allowed by a versioned extension mechanism.
+- [x] Reject paths outside repository root.
+- [x] Reject shell wrappers and unsafe executable definitions.
+- [x] Produce actionable validation errors with file/field context.
+- [x] Canonicalize policy and derive `policyHash`.
 
 **Tests:** valid policy, malformed YAML, duplicate keys, path traversal, shell metacharacter cases, unsupported version, stable hash.
 
 ## 2.2 Safe process runner
 
-- [ ] Execute executable + argv directly without a shell.
-- [ ] Run in approved working directory.
-- [ ] Use explicit environment allowlist.
-- [ ] Stream concise progress to terminal.
-- [ ] Capture bounded stdout/stderr.
-- [ ] Enforce timeout and kill child process groups.
-- [ ] Record start/end/duration/exit code/signal/timeout.
-- [ ] Support deterministic sequential execution first; add bounded parallel checks only if safe and needed.
+- [x] Execute executable + argv directly without a shell.
+- [x] Run in approved working directory.
+- [x] Use explicit environment allowlist.
+- [x] Stream concise progress to terminal.
+- [x] Capture bounded stdout/stderr.
+- [x] Enforce timeout and kill child process groups.
+- [x] Record start/end/duration/exit code/signal/timeout.
+- [x] Support deterministic sequential execution first; add bounded parallel checks only if safe and needed.
 
 **Tests:** spaces, special characters, timeout, child process, large output, nonzero exit, missing executable.
 
 ## 2.3 Redaction and truncation
 
-- [ ] Implement default secret patterns.
-- [ ] Implement validated project patterns.
-- [ ] Redact before persistence and public hashing.
-- [ ] Record redaction counts and deterministic markers.
-- [ ] Add output truncation with original byte count and digest.
-- [ ] Add server-side residual-secret rejection.
+- [x] Implement default secret patterns.
+- [x] Implement validated project patterns.
+- [x] Redact before persistence and public hashing.
+- [x] Record redaction counts and deterministic markers.
+- [x] Add output truncation with original byte count and digest.
+- [x] Add server-side residual-secret rejection.
 
 **Tests:** seeded fake GitHub token, private key, database URL, split-line secret, false-positive controls, deterministic output.
 
 ## 2.4 Git collector
 
-- [ ] Locate repository root.
-- [ ] Capture normalized remote URL without credentials.
-- [ ] Capture branch, full HEAD object ID, tree ID, author/committer, and commit timestamp.
-- [ ] Detect staged, unstaged, and untracked changes.
-- [ ] Capture bounded file/diff summary without storing source content by default.
-- [ ] Derive EVM-compatible `commitHash` from the full Git object ID.
-- [ ] Handle detached HEAD and repositories with no commits.
+- [x] Locate repository root.
+- [x] Capture normalized remote URL without credentials.
+- [x] Capture branch, full HEAD object ID, tree ID, author/committer, and commit timestamp.
+- [x] Detect staged, unstaged, and untracked changes.
+- [x] Capture bounded file/diff summary without storing source content by default.
+- [x] Derive EVM-compatible `commitHash` from the full Git object ID.
+- [x] Handle detached HEAD and repositories with no commits.
 
 **Tests:** clean repo, dirty repo, untracked files, detached HEAD, credentialed HTTPS remote redaction, SHA formats.
 
 ## 2.5 Canonical evidence bundle
 
-- [ ] Implement schema version 1.
-- [ ] Bind task hash, policy hash, Git identity, checks, tool version, and safe environment metadata.
-- [ ] Derive passing status from required checks and repository constraints.
-- [ ] Canonicalize JSON and calculate `evidenceHash`.
-- [ ] Write pretty JSON for humans while hashing canonical bytes.
-- [ ] Add independent local `verify-bundle` function.
+- [x] Implement schema version 1.
+- [x] Bind task hash, policy hash, Git identity, checks, tool version, and safe environment metadata.
+- [x] Derive passing status from required checks and repository constraints.
+- [x] Canonicalize JSON and calculate `evidenceHash`.
+- [x] Write pretty JSON for humans while hashing canonical bytes.
+- [x] Add independent local `verify-bundle` function.
 
 **Tests:** insertion order, altered exit code, altered task hash, missing required check, duplicate check, unsupported schema, stable fixtures.
 
@@ -671,3 +671,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: No deployer/verifier key, wallet address, or credential was added. Explorer API credentials remain blank.
 - Remaining risks/blockers: Deployment, source verification, and live create/submit/approve/withdraw require a dedicated funded Testnet wallet, verifier key/address, working outbound RPC DNS, and explorer verification access.
 - Commit: network configuration `e526f713ed02c73a3abc86e6415874bbffa62209`; ABI versioning `c4f86d04d1fa93c73408603f23c03e34fb8aca6f` with formatting correction `5ce6d3ffe64adf33a4c62643d831980264abad06`.
+
+## 2026-07-17 10:58 IST — Evidence engineer + independent reviewer + Codex/integrator — 2.1–2.5
+- Branch/worktree: `feat/evidence-engine` in `/Users/salescode/Documents/Code/DoneBond-evidence`, integrated to `main`.
+- Summary: Implemented the complete EvidenceBundleV1 protocol: strict duplicate-safe YAML policies; RFC 8785 policy/task/evidence commitments; direct argv execution with no shell, allowlisted environment, realpath confinement, bounded output, timeout and process-group termination; deterministic secret redaction and residual scanning; exact Git commit/tree/branch/remote/dirty-state collection; privacy-minimized public projection; atomic restrictive bundle writes; frozen commitment vectors; and independent fail-closed verification.
+- Files changed: `packages/evidence/**` and `pnpm-lock.yaml`.
+- Verification commands: `pnpm install --frozen-lockfile`; evidence build/typecheck/test; root format/lint/typecheck/test/build; current-tree secret scan; production critical dependency audit; `git diff --check`; independent mutation and repository-constraint review.
+- Results: Evidence suite passed 35/35 after integration; root typecheck passed 6/6 workspace tasks. Independent reviewer reproduced the original base-commit verification gap and verified its correction: a passing base-bound bundle now requires matching independently collected repository context. Branch and remote-owner forgeries, unsafe paths, shell wrappers, timeouts, output floods, malformed output, residual secrets, and commitment mutations fail closed. No critical/high finding remains.
+- Security/privacy notes: Author/committer identities and absolute local paths remain outside the public bundle. Raw V1 bundles retain normalized repository identity and changed path names, so a future public API must deny raw downloads for private projects or use a separately specified safe projection. EvidenceBundleV1 cannot encode repository-constraint failure outcomes; branch/remote violations therefore refuse bundle creation and base ancestry requires trusted local context.
+- Remaining risks/blockers: One unrelated moderate PostCSS production advisory remains below the critical audit gate. Public/private bundle access control is required in task 4.7. Live chain anchoring remains blocked by the documented task 3.5 deployment credentials/network prerequisites.
+- Commit: `c0fe96d52f4cc3afde89c5c9bd03c10bc3e4e9c0`.
