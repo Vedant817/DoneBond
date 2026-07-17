@@ -231,7 +231,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 4.2 Authentication and authorization
 
-- [ ] Implement secure browser authentication.
+- [-] Implement secure browser authentication. (Primary agent, `main`; cryptographic/session foundation complete, persistence/routes pending.)
 - [ ] Implement wallet ownership association/signature challenge if used.
 - [ ] Add project ownership/member checks.
 - [ ] Add authorization matrix tests.

@@ -2,10 +2,12 @@
   "name": "@donebond/web",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "next build",
     "dev": "next dev --port 3100",
     "start": "next start --port 3100",
+    "test": "node --test --experimental-strip-types src/server/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,7 +18,8 @@
     "geist": "1.7.2",
     "next": "16.2.10",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "viem": "2.47.4"
   },
   "devDependencies": {
     "@types/node": "catalog:",

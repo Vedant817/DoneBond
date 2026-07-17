@@ -18,7 +18,7 @@ import {
 export const DOMAIN_SCHEMA_VERSION = 1 as const;
 export const EVIDENCE_SCHEMA_VERSION = 1 as const;
 
-const SupportedChainIdSchema = z.union([z.literal(143), z.literal(10_143)]);
+export const SupportedChainIdSchema = z.union([z.literal(143), z.literal(10_143)]);
 const BranchNameSchema = z.string().trim().min(1).max(255);
 const normalizedText = (maximum: number) => NormalizedTextSchema.pipe(z.string().max(maximum));
 
