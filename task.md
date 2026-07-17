@@ -750,4 +750,4 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Results: DB passed 36/37 with the guarded real-PostgreSQL test skipped; web passed 21/21. Owner, member, member-as-owner denial, unauthenticated access, nonmember, cross-project, missing/deleted project, malformed ID, unknown runtime role, inconsistent ownership, and mismatched adapter results are covered. The reviewer’s unknown-role downgrade finding was reproduced, fixed, and re-tested.
 - Security/privacy notes: Unauthorized and nonexistent projects share `PROJECT_NOT_FOUND`; only an authenticated member can receive `AUTH_FORBIDDEN` when attempting an owner-only operation. The read model returns only public ID and role, never internal UUIDs or repository metadata.
 - Remaining risks/blockers: The public-endpoint allowlist child item remains open until the receipt API is implemented. Real PostgreSQL authorization and cascade behavior remain guarded by the unavailable disposable database.
-- Commit: DB read model `4a845aa`; web integration pending.
+- Commit: DB read model `4a845aa`; aligned web/service integration `8af4f7089a92f42ebc138ea6a8ffc8d20f777d27`.
