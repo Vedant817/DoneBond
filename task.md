@@ -317,10 +317,10 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 5.4 `donebond task pull`
 
-- [ ] Fetch task and safe acceptance criteria.
-- [ ] Verify project/policy match.
-- [ ] Save local task manifest.
-- [ ] Avoid modifying implementation files.
+- [x] Fetch task and safe acceptance criteria.
+- [x] Verify project/policy match.
+- [x] Save local task manifest.
+- [x] Avoid modifying implementation files.
 
 ## 5.5 `donebond verify`
 
@@ -711,3 +711,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: TLS requires certificate validation and optionally a private CA; disabling TLS is loopback-only. Tokens persist only as exact lowercase 64-hex digests. State-changing resources, idempotency bindings, and audit entries share transactions. `esbuild` lifecycle scripts are explicitly allowed because three locked versions are required by the reviewed `drizzle-kit` development toolchain; no production runtime depends on Drizzle Kit.
 - Remaining risks/blockers: The guarded migration/constraint integration test must run against an explicitly confirmed disposable database ending in `_test`. Docker/OrbStack and local PostgreSQL are unavailable in this environment, so schema execution, rollback, and concurrency behavior are not yet claimed and the first two 4.1 items remain blocked rather than done.
 - Commit: foundation `a17e911`; integrity remediation `a661b18`; replacement hardening `5a6ff30`; lock/toolchain integration recorded by the following coordinator commit.
+
+## 2026-07-17 12:02 IST — Codex/primary agent + independent evidence reviewer — 5.4
+- Branch/worktree: `main` with read-only independent review.
+- Summary: Added authenticated `donebond task pull`, restrictive repository-scoped credential loading, strict bounded task response parsing, exact requested-task/project/local-policy checks, server-independent canonical task-hash recomputation, and atomic mode-0600 local task manifests ignored by Git.
+- Files changed: `apps/cli/**`, manifest, and tracker.
+- Verification commands: CLI build/typecheck/test; root lint/format/boundaries; tracked secret scan; `git diff --check`; independent path-safety reproduction and commitment-mutation review.
+- Results: CLI suite passed 16/16. Negative cases cover altered task hash, requested ID, project, policy, malformed payload, oversized response, replaced credential-root symlink, task/policy leaf symlinks, and a `.donebond` parent symlink targeting source. Independent reproduction confirms the prior parent-symlink write flaw now returns `REPOSITORY_UNSAFE_PATH` before credentials/network and preserves the implementation sentinel. No critical/high finding remains.
+- Security/privacy notes: Bearer tokens remain outside the repository and logs; GET redirects are disabled, responses are capped at 64 KiB with fatal UTF-8 parsing, and task content is strict-schema validated. Portable path APIs leave a low same-user TOCTOU possibility if another local process swaps `.donebond` between validation and rename; the directory and leaf are validated and atomic rename limits the window.
+- Remaining risks/blockers: Real task pulling awaits task 4.5 API completion. Local contract verification and evidence generation are task 5.5.
+- Commit: `9555e7c451cb08c72d4777af9c161eb79934f0c3`.
