@@ -1,3 +1,5 @@
+import { EvidenceError } from "@donebond/evidence";
+
 export enum ExitCode {
   Success = 0,
   Usage = 2,
@@ -12,6 +14,8 @@ export type CliErrorCode =
   | "CLI_USAGE"
   | "CONFIG_INVALID"
   | "CONFIG_UNSAFE_PATH"
+  | "POLICY_INVALID"
+  | "REPOSITORY_INVALID"
   | "REPOSITORY_NOT_FOUND"
   | "REPOSITORY_UNSAFE_PATH"
   | "POLICY_EXISTS"
@@ -33,6 +37,15 @@ export class CliError extends Error {
 export function toCliError(error: unknown): CliError {
   if (error instanceof CliError) {
     return error;
+  }
+  if (error instanceof EvidenceError) {
+    const repositoryError = error.code.startsWith("GIT_") || error.code.includes("REPOSITORY");
+    return new CliError(
+      repositoryError ? "REPOSITORY_INVALID" : "POLICY_INVALID",
+      error.message,
+      repositoryError ? ExitCode.Repository : ExitCode.Configuration,
+      { cause: error }
+    );
   }
   return new CliError(
     "INTERNAL_ERROR",

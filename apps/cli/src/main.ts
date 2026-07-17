@@ -10,6 +10,7 @@ import type { ConnectionInput } from "./config.js";
 import { CliError, ExitCode, toCliError } from "./errors.js";
 import { initializeRepository } from "./init.js";
 import { CliOutput } from "./output.js";
+import { renderPolicySummary, validatePolicyCommand } from "./policy-command.js";
 import { readVersion } from "./version.js";
 
 const HELP = `DoneBond CLI
@@ -20,7 +21,8 @@ Usage:
   donebond --version
 
 Commands:
-  init    Initialize DoneBond policy and optional API configuration
+  init             Initialize DoneBond policy and optional API configuration
+  policy validate  Validate and explain the deterministic verification policy
 
 Global options:
   --json       Emit newline-delimited JSON results and errors
@@ -50,6 +52,17 @@ Without --offline or connection options, an interactive terminal prompts for
 the API URL, project ID, and a hidden token.
 `;
 
+const POLICY_VALIDATE_HELP = `Usage: donebond policy validate [options]
+
+Validates the strict policy, prints every executable/argument/cwd/timeout, and
+prints the canonical policy hash without executing any command.
+
+Options:
+  --repo <path>        Start repository discovery at path (default: current directory)
+  --policy <path>      Policy path (default: <repo>/.donebond/policy.yml)
+  -h, --help           Show this command help
+`;
+
 interface CliContext {
   stdin: Readable & { isTTY?: boolean; setRawMode?: (mode: boolean) => void };
   stdout: Writable;
@@ -76,6 +89,12 @@ interface InitArguments {
   apiUrl?: string;
   projectId?: string;
   tokenStdin: boolean;
+}
+
+interface PolicyArguments {
+  help: boolean;
+  repo: string;
+  policyPath?: string;
 }
 
 function optionValue(arguments_: string[], index: number, option: string): string {
@@ -136,6 +155,44 @@ function parseInitArguments(arguments_: string[], defaultRepository: string): In
         throw new CliError(
           "CLI_USAGE",
           "Unknown init option. Run donebond init --help for supported options.",
+          ExitCode.Usage
+        );
+    }
+  }
+  return parsed;
+}
+
+function parsePolicyArguments(arguments_: string[], defaultRepository: string): PolicyArguments {
+  const parsed: PolicyArguments = { help: false, repo: defaultRepository };
+  const seen = new Set<string>();
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === undefined) continue;
+    const canonical = argument === "-h" ? "--help" : argument;
+    if (seen.has(canonical)) {
+      throw new CliError(
+        "CLI_USAGE",
+        "A policy option was provided more than once.",
+        ExitCode.Usage
+      );
+    }
+    seen.add(canonical);
+    switch (canonical) {
+      case "--help":
+        parsed.help = true;
+        break;
+      case "--repo":
+        parsed.repo = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      case "--policy":
+        parsed.policyPath = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      default:
+        throw new CliError(
+          "CLI_USAGE",
+          "Unknown policy option. Run donebond policy validate --help.",
           ExitCode.Usage
         );
     }
@@ -274,6 +331,33 @@ async function execute(
     }
     const version = await readVersion();
     output.result(version, { version });
+    return ExitCode.Success;
+  }
+  if (filtered[0] === "policy") {
+    if (filtered[1] !== "validate") {
+      throw new CliError(
+        "CLI_USAGE",
+        "Unknown policy command. Run donebond policy validate --help.",
+        ExitCode.Usage
+      );
+    }
+    const policyArguments = parsePolicyArguments(filtered.slice(2), context.cwd);
+    if (policyArguments.help) {
+      output.result(POLICY_VALIDATE_HELP.trimEnd());
+      return ExitCode.Success;
+    }
+    const summary = await validatePolicyCommand({
+      startDirectory: policyArguments.repo,
+      ...(policyArguments.policyPath === undefined
+        ? {}
+        : { policyPath: policyArguments.policyPath })
+    });
+    output.result(renderPolicySummary(summary), {
+      repositoryRoot: summary.repositoryRoot,
+      policyPath: summary.policyPath,
+      policyHash: summary.policyHash,
+      checks: summary.checks
+    });
     return ExitCode.Success;
   }
   if (filtered[0] !== "init") {

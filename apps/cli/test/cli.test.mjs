@@ -104,6 +104,66 @@ test("offline init discovers a nested Git repository and creates a legitimate po
   assert.equal(ignore.includes(".donebond/policy.yml"), false);
 });
 
+test("policy validate explains exact commands and returns a stable hash", async () => {
+  const root = await gitRepository();
+  await initializeRepository({ startDirectory: root, force: false });
+  const stdout = captureStream();
+  const stderr = captureStream();
+  assert.equal(
+    await runCli(["policy", "validate", "--repo", root], {
+      stdout: stdout.stream,
+      stderr: stderr.stream
+    }),
+    ExitCode.Success
+  );
+  assert.match(stdout.value(), /Policy valid: 0x[0-9a-f]{64}/u);
+  assert.match(stdout.value(), /command: "pnpm" "test"/u);
+  assert.match(stdout.value(), /cwd: \./u);
+  assert.match(stdout.value(), /timeout: 600s/u);
+
+  const json = captureStream();
+  assert.equal(
+    await runCli(["policy", "validate", "--repo", root, "--json"], {
+      stdout: json.stream,
+      stderr: stderr.stream
+    }),
+    ExitCode.Success
+  );
+  const result = JSON.parse(json.value());
+  assert.match(result.policyHash, /^0x[0-9a-f]{64}$/u);
+  assert.equal(result.checks[0].executable, "pnpm");
+  assert.deepEqual(result.checks[0].args, ["test"]);
+});
+
+test("policy validate rejects unsafe commands and paths outside the repository", async () => {
+  const root = await gitRepository();
+  await initializeRepository({ startDirectory: root, force: false });
+  const policyPath = join(root, ".donebond", "policy.yml");
+  const validPolicy = await readFile(policyPath, "utf8");
+  await writeFile(policyPath, validPolicy.replace("executable: pnpm", "executable: sh"), "utf8");
+  const unsafeError = captureStream();
+  assert.equal(
+    await runCli(["policy", "validate", "--repo", root], {
+      stdout: captureStream().stream,
+      stderr: unsafeError.stream
+    }),
+    ExitCode.Configuration
+  );
+  assert.match(unsafeError.value(), /POLICY_INVALID/u);
+
+  const external = join(await temporaryDirectory("donebond-policy-outside-"), "policy.yml");
+  await writeFile(external, validPolicy, "utf8");
+  const pathError = captureStream();
+  assert.equal(
+    await runCli(["policy", "validate", "--repo", root, "--policy", external], {
+      stdout: captureStream().stream,
+      stderr: pathError.stream
+    }),
+    ExitCode.Repository
+  );
+  assert.match(pathError.value(), /REPOSITORY_INVALID/u);
+});
+
 test("init refuses overwrite unless forced and updates gitignore idempotently", async () => {
   const root = await gitRepository();
   await initializeRepository({ startDirectory: root, force: false });

@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 
-import { PublicIdentifierSchema } from "../../../packages/shared/dist/identifiers.js";
+import { PublicIdentifierSchema } from "@donebond/shared";
 
 import { CliError, ExitCode } from "./errors.js";
 
