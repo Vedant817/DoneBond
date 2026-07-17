@@ -113,7 +113,19 @@ importers:
       "@donebond/shared":
         specifier: workspace:*
         version: link:../shared
+      canonicalize:
+        specifier: 2.1.0
+        version: 2.1.0
+      viem:
+        specifier: 2.55.2
+        version: 2.55.2(typescript@5.9.3)(zod@4.4.3)
+      yaml:
+        specifier: 2.8.3
+        version: 2.8.3
     devDependencies:
+      "@types/node":
+        specifier: "catalog:"
+        version: 26.1.1
       typescript:
         specifier: "catalog:"
         version: 5.9.3
@@ -1444,6 +1456,13 @@ packages:
       {
         integrity: sha512-52noaS3DubycKSXaU30TwPGIp+POyQSUVa5jBEq3vkRkY0kjyb3LQgvhU6WGyCcyXqVLWO0Cw0Q6BSdD0kUfVA==
       }
+
+  canonicalize@2.1.0:
+    resolution:
+      {
+        integrity: sha512-F705O3xrsUtgt98j7leetNhTWPe+5S72rlL5O4jA1pKqBVQ/dT1O1D6PFxmSXvc0SUOinWS57DKx0I3CHrXJHQ==
+      }
+    hasBin: true
 
   chalk@4.1.2:
     resolution:
@@ -3283,6 +3302,14 @@ packages:
         integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==
       }
 
+  yaml@2.8.3:
+    resolution:
+      {
+        integrity: sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==
+      }
+    engines: { node: ">= 14.6" }
+    hasBin: true
+
   yocto-queue@0.1.0:
     resolution:
       {
@@ -4057,6 +4084,8 @@ snapshots:
   callsites@3.1.0: {}
 
   caniuse-lite@1.0.30001805: {}
+
+  canonicalize@2.1.0: {}
 
   chalk@4.1.2:
     dependencies:
@@ -5435,6 +5464,8 @@ snapshots:
   ws@8.21.0: {}
 
   yallist@3.1.1: {}
+
+  yaml@2.8.3: {}
 
   yocto-queue@0.1.0: {}
 

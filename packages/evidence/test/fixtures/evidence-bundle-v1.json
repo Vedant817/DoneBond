@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "task": {
+    "publicId": "task_vector",
+    "taskHash": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "policy": {
+    "policyHash": "0x0d340d454519bb2141440c199a373ff3ff3d55e2980b752afb21f5c9e8f426b9",
+    "sourcePath": "donebond.policy.yml"
+  },
+  "git": {
+    "objectId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "derivedCommitHash": "0xb1ea87eaba6a863db3dbee00a189c494c5ceab23db860f651c4720898cddce21",
+    "treeId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "branch": "main",
+    "remote": "github.com/vedant817/sample",
+    "clean": true,
+    "changedFiles": []
+  },
+  "checks": [
+    {
+      "key": "test",
+      "label": "Test",
+      "required": true,
+      "status": "passed",
+      "startedAt": "2026-07-17T00:00:00.000Z",
+      "durationMs": 10,
+      "exitCode": 0,
+      "signal": null,
+      "stdout": {
+        "preview": "ok\n",
+        "digest": "0xbe56c5573b7c56f8335068660f6c8a1c8042f092b8faf61ff177cec3ad88a214",
+        "originalBytes": 3,
+        "truncated": false
+      },
+      "stderr": {
+        "preview": "",
+        "digest": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+        "originalBytes": 0,
+        "truncated": false
+      }
+    }
+  ],
+  "result": {
+    "passing": true,
+    "requiredPassed": 1,
+    "requiredTotal": 1,
+    "failureCodes": []
+  },
+  "tool": {
+    "name": "donebond-cli",
+    "version": "1.0.0",
+    "platform": "test-platform",
+    "nodeVersion": "v24.14.0"
+  },
+  "redactions": {}
+}

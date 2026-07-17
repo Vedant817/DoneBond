@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskHash": "0x9ec191bd5141fdf216970a3975bcb82cdd014e1936cd7747dfb9db2403b9dae2",
+  "policyHash": "0x0d340d454519bb2141440c199a373ff3ff3d55e2980b752afb21f5c9e8f426b9",
+  "commitHash": "0xb1ea87eaba6a863db3dbee00a189c494c5ceab23db860f651c4720898cddce21",
+  "evidenceHash": "0xf5aac715410a66669187a53b3281bd1936904e612faabc47be2dc49916916b32",
+  "canonicalTask": {
+    "kind": "donebond.task",
+    "schemaVersion": 1,
+    "projectPublicId": "project_vector",
+    "repositoryIdentity": "github.com/vedant817/sample",
+    "targetBranch": "main",
+    "baseCommit": null,
+    "title": "Canonical task",
+    "description": "Prove the exact result",
+    "acceptanceCriteria": [{ "key": "tests", "description": "All tests pass" }],
+    "assigneeWallet": "0x1111111111111111111111111111111111111111",
+    "deadlineUnixSeconds": "1784246400",
+    "rewardWei": "1000000000000000000",
+    "policyHash": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}
