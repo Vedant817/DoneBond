@@ -30,6 +30,22 @@ Fail fast at process startup for missing or malformed required values. Keep clie
 
 Suggested variables are listed in `.env.example`.
 
+## Confirmed Monad Testnet configuration
+
+Reconfirmed against the official Monad Developer Portal and network changelog on
+2026-07-17:
+
+- chain ID: `10143`;
+- public RPC: `https://rpc.testnet.monad.xyz`;
+- explorer: `https://testnet.monadscan.com`;
+- native symbol: `MON`.
+
+Sources: [Monad Developer Portal](https://developers.monad.xyz/) and
+[official chain configuration changelog](https://docs.monad.xyz/developer-essentials/changelog).
+Reconfirm these values immediately before broadcast. A documentation check does
+not replace `cast chain-id` and a funded-wallet preflight from the deployment
+environment.
+
 ## Contract deployment procedure
 
 1. Reconfirm current chain ID, RPC, explorer, faucet, and verification instructions from official Monad documentation.

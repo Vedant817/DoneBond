@@ -208,7 +208,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 3.5 Testnet deployment
 
-- [ ] Confirm current official Monad Testnet chain configuration.
+- [x] Confirm current official Monad Testnet chain configuration.
 - [ ] Fund a dedicated deployment wallet with test MON.
 - [ ] Deploy contract.
 - [ ] Verify source code in supported explorer.
@@ -660,4 +660,14 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Results: 32/32 tests passed: 25 unit/fuzz, 3 adversarial, 4 invariants. Fuzz tests ran 512 cases each. Every invariant ran 256 runs/16,384 calls with zero handler reverts and thousands of successful create/submit/approve/reject/cancel/expire/withdraw actions. Registry coverage is 100% lines/functions, 99.15% statements, 96% branches. Shared/Solidity EIP-712 digest `0xc319…` matches. Auditor reports no remaining critical/high findings.
 - Security/privacy notes: Attestations bind chain, contract, task/policy/assignee/evidence/commit/expiry and cannot replay; checks-effects-interactions, reentrancy guard, reward zeroing, aggregate accounting, and pull payments prevent duplicate settlement. Forced funds produce harmless surplus under `balance >= liabilities`. No deployment secrets were persisted.
 - Remaining risks/blockers: Receipt-submitted rewards have no unilateral review timeout; ECDSA EOA verifier rotation requires a new deployment; validator timestamp skew requires practical buffers. These accepted MVP risks are documented. Slither/Aderyn/Solhint/Mythril/Semgrep were unavailable; Foundry lint produced only documented timestamp warnings. Monad Testnet deployment and live settlement remain task 3.5 and require an externally funded wallet/RPC.
-- Commit: implementation `708a9410bc174e668317ed4852a3c89603a43ea8`; audit hardening pending in this changeset.
+- Commit: implementation `708a9410bc174e668317ed4852a3c89603a43ea8`; audit hardening `78ae8ef7e58f9676c060e0fd9188aa891a4ff0d5`.
+
+## 2026-07-17 10:33 IST — Codex/release integrator — 3.5 (partial)
+- Branch/worktree: `main`.
+- Summary: Reconfirmed current official Monad Testnet chain ID, public RPC, explorer, and native token; synchronized safe public defaults and the deployment runbook.
+- Files changed: `.env.example`, `DEPLOYMENT.md`, manifest, and tracker.
+- Verification commands: Official Monad Developer Portal/documentation lookup; attempted `cast chain-id`, `cast block-number`, and explorer HEAD preflight.
+- Results: Official primary sources report chain ID `10143`, RPC `https://rpc.testnet.monad.xyz`, explorer `https://testnet.monadscan.com`, and native `MON`. Shell preflight could not resolve external DNS in this execution environment, so no transaction or live RPC result is claimed.
+- Security/privacy notes: No deployer/verifier key, wallet address, or credential was added. Explorer API credentials remain blank.
+- Remaining risks/blockers: Deployment, source verification, and live create/submit/approve/withdraw require a dedicated funded Testnet wallet, verifier key/address, working outbound RPC DNS, and explorer verification access.
+- Commit: pending (this changeset).
