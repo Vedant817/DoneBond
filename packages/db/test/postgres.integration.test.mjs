@@ -12,6 +12,7 @@ import {
   DoneBondRepository,
   DrizzleAuthRateLimiter,
   DrizzleBrowserSessionStore,
+  DrizzleCliTokenRepository,
   DrizzleWalletAccountResolver,
   DrizzleWalletChallengeStore,
   parseDatabaseEnvironment
@@ -137,11 +138,152 @@ test(
         await repository.findProjectAccess("01arz3ndektsv4rrffq69g5fay", crossProjectUserId),
         null
       );
+      const cliTokenRepository = new DrizzleCliTokenRepository(database);
+      const cliTokenTestStartedAt = new Date();
+      const cliTokenPublicId = "01arz3ndektsv4rrffq69g5fab";
+      const cliTokenDigest = "7".repeat(64);
+      const cliTokenInput = {
+        actorUserId: userId,
+        projectPublicId: targetProjectPublicId,
+        tokenPublicId: cliTokenPublicId,
+        tokenPrefix: "dbt_abcd",
+        tokenDigest: cliTokenDigest
+      };
+      const cliTokenIdempotency = {
+        actorScope: `user:${userId}`,
+        operation: "cli_token_create",
+        idempotencyKey: "integration-cli-token-create",
+        requestHash: `0x${"7".repeat(64)}`,
+        expiresAt: new Date(cliTokenTestStartedAt.getTime() + 24 * 60 * 60 * 1000)
+      };
+      const createdCliToken = await cliTokenRepository.create(cliTokenInput, cliTokenIdempotency);
+      assert.equal(createdCliToken.tokenPublicId, cliTokenPublicId);
+      assert.equal("tokenDigest" in createdCliToken, false);
+      assert.equal(
+        (await cliTokenRepository.create(cliTokenInput, cliTokenIdempotency)).tokenPublicId,
+        cliTokenPublicId
+      );
+      const [persistedCliToken] = await client`
+        SELECT token_digest, last_used_at, revoked_at
+        FROM cli_tokens
+        WHERE public_id = ${cliTokenPublicId}
+      `;
+      assert.equal(persistedCliToken.token_digest, cliTokenDigest);
+      assert.equal(persistedCliToken.last_used_at, null);
+
+      await assert.rejects(
+        cliTokenRepository.create(
+          {
+            ...cliTokenInput,
+            actorUserId: memberUserId,
+            tokenPublicId: "01arz3ndektsv4rrffq69g5fac"
+          },
+          {
+            ...cliTokenIdempotency,
+            actorScope: `user:${memberUserId}`,
+            idempotencyKey: "integration-cli-token-member-create"
+          }
+        ),
+        (error) => error.code === "DB_NOT_FOUND"
+      );
+      assert.equal(
+        await cliTokenRepository.authenticate(
+          crossProjectPublicId,
+          cliTokenDigest,
+          new Date(cliTokenTestStartedAt.getTime() + 1)
+        ),
+        null
+      );
+      const [afterWrongProject] = await client`
+        SELECT last_used_at FROM cli_tokens WHERE public_id = ${cliTokenPublicId}
+      `;
+      assert.equal(afterWrongProject.last_used_at, null);
       await client`DELETE FROM projects WHERE id = ${crossProjectId}`;
       assert.equal(
         await repository.findProjectAccess(crossProjectPublicId, crossProjectUserId),
         null
       );
+      const usedAt = new Date(cliTokenTestStartedAt.getTime() + 2);
+      assert.equal(
+        (await cliTokenRepository.authenticate(targetProjectPublicId, cliTokenDigest, usedAt))
+          ?.tokenPublicId,
+        cliTokenPublicId
+      );
+
+      const raceDigest = "8".repeat(64);
+      const raceResults = await Promise.allSettled([
+        cliTokenRepository.create(
+          {
+            ...cliTokenInput,
+            tokenPublicId: "01arz3ndektsv4rrffq69g5fad",
+            tokenDigest: raceDigest
+          },
+          {
+            ...cliTokenIdempotency,
+            idempotencyKey: "integration-cli-token-race-a",
+            requestHash: `0x${"8".repeat(64)}`
+          }
+        ),
+        cliTokenRepository.create(
+          {
+            ...cliTokenInput,
+            tokenPublicId: "01arz3ndektsv4rrffq69g5fae",
+            tokenDigest: raceDigest
+          },
+          {
+            ...cliTokenIdempotency,
+            idempotencyKey: "integration-cli-token-race-b",
+            requestHash: `0x${"9".repeat(64)}`
+          }
+        )
+      ]);
+      assert.equal(raceResults.filter((result) => result.status === "fulfilled").length, 1);
+      assert.equal(raceResults.filter((result) => result.status === "rejected").length, 1);
+      const duplicateRejection = raceResults.find((result) => result.status === "rejected");
+      assert.equal(duplicateRejection?.reason.code, "DB_CONFLICT");
+
+      const revokedAt = new Date(cliTokenTestStartedAt.getTime() + 3);
+      await assert.rejects(
+        cliTokenRepository.revoke(memberUserId, targetProjectPublicId, cliTokenPublicId, revokedAt),
+        (error) => error.code === "DB_NOT_FOUND"
+      );
+      assert.equal(
+        (
+          await cliTokenRepository.revoke(
+            userId,
+            targetProjectPublicId,
+            cliTokenPublicId,
+            revokedAt
+          )
+        )?.revokedAt.getTime(),
+        revokedAt.getTime()
+      );
+      assert.equal(
+        (
+          await cliTokenRepository.revoke(
+            userId,
+            targetProjectPublicId,
+            cliTokenPublicId,
+            revokedAt
+          )
+        )?.revokedAt.getTime(),
+        revokedAt.getTime()
+      );
+      assert.equal(
+        await cliTokenRepository.authenticate(targetProjectPublicId, cliTokenDigest, revokedAt),
+        null
+      );
+      const [afterRevokedAuthentication] = await client`
+        SELECT last_used_at FROM cli_tokens WHERE public_id = ${cliTokenPublicId}
+      `;
+      assert.equal(afterRevokedAuthentication.last_used_at.getTime(), usedAt.getTime());
+      const [{ revokeAuditCount }] = await client`
+        SELECT count(*)::int AS "revokeAuditCount"
+        FROM audit_events
+        WHERE action = 'cli_token.revoked'
+          AND metadata_safe_json->>'tokenPublicId' = ${cliTokenPublicId}
+      `;
+      assert.equal(revokeAuditCount, 1);
       const invalidDigest = "test-only-invalid-digest";
       await assert.rejects(
         client`

@@ -1,6 +1,7 @@
 export * from "./auth-rate-limiter.js";
 export * from "./auth-repository.js";
 export * from "./client.js";
+export * from "./cli-token-repository.js";
 export * from "./env.js";
 export * from "./errors.js";
 export * from "./repository.js";

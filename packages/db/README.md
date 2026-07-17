@@ -80,6 +80,10 @@ create a new migration instead.
   lowercase SHA-256 digest and explicit scope. A conditional upsert makes the
   allow/deny decision atomically across application instances; expiry-indexed,
   bounded cleanup avoids unbounded stale-row accumulation and long cleanup locks.
+- Project CLI tokens persist only a caller-produced keyed SHA-256 digest and a
+  short display prefix. Owner-scoped creation is idempotency-bound, revocation is
+  idempotent, and successful authentication atomically advances `last_used_at`
+  only when the digest is active and belongs to the exact requested project.
 
 No success-state fixtures are seeded. Tests create their own records and must
 destroy them after use.
