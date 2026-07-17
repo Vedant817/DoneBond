@@ -19,7 +19,7 @@ export const PolicyCheckSchema = z.strictObject({
 const VerificationPolicyObjectSchema = z.strictObject({
   schemaVersion: z.literal(POLICY_SCHEMA_VERSION),
   repository: z.strictObject({
-    requireCleanWorkingTree: z.boolean(),
+    requireCleanWorkingTree: z.literal(true),
     allowedBranches: z.array(z.string().min(1).max(255)).min(1).max(100),
     expectedRemoteOwner: z.string().min(1).max(255).optional(),
     baseCommit: GitObjectIdSchema.optional()

@@ -10,6 +10,7 @@ export { initializeRepository } from "./init.js";
 export { runCli } from "./main.js";
 export { validatePolicyCommand } from "./policy-command.js";
 export { pullTask } from "./task-command.js";
+export { verifyTask } from "./verify-command.js";
 
 const entrypoint = process.argv[1];
 const isEntrypoint =

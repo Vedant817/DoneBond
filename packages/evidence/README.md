@@ -24,13 +24,16 @@ bundles independently.
 ## Version-1 repository-constraint limitation
 
 The frozen shared `EvidenceBundleV1` derives `result.passing` from required check
-outcomes and clean Git state. It has no field for branch, remote-owner, or
+outcomes and clean Git state, so a version-1 policy must set
+`requireCleanWorkingTree: true`; the policy parser rejects `false` rather than
+implying that a passing dirty-tree receipt can be represented. It has no field for branch, remote-owner, or
 base-commit constraint outcomes. To prevent a false passing receipt, this package
 refuses to build a bundle when branch or remote-owner constraints fail. Base
 commit ancestry is evaluated by `collectGitState`; building requires that local
 result, and independent `verifyBundle` requires matching repository context when
 the policy declares a base commit. A future schema version may encode these
-constraint results directly. The public object/tree IDs still let a third party
+constraint results directly, including an explicit dirty-tree permission if that
+is needed. The public object/tree IDs still let a third party
 inspect the bound commit independently.
 
 ## Direct verification

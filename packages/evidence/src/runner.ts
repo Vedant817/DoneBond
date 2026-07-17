@@ -11,7 +11,16 @@ const PUBLIC_PREVIEW_LIMIT = 262_144;
 const ABSOLUTE_CAPTURE_LIMIT = 16 * 1024 * 1024;
 
 export type RunnerProgress =
-  | { readonly type: "check-started"; readonly key: string; readonly label: string }
+  | {
+      readonly type: "check-started";
+      readonly key: string;
+      readonly label: string;
+      readonly executable: string;
+      readonly args: readonly string[];
+      readonly cwd: string;
+      readonly timeoutSeconds: number;
+      readonly environmentNames: readonly string[];
+    }
   | {
       readonly type: "check-finished";
       readonly key: string;
@@ -133,7 +142,19 @@ export async function runCheck(
   const stderr: CapturedStream = { chunks: [], bytes: 0, retainedBytes: 0, exceeded: false };
   const startedAt = new Date().toISOString();
   const start = performance.now();
-  options.onProgress?.({ type: "check-started", key: check.key, label: check.label });
+  options.onProgress?.({
+    type: "check-started",
+    key: check.key,
+    label: check.label,
+    executable: check.executable,
+    args: check.args,
+    cwd: check.cwd,
+    timeoutSeconds: check.timeoutSeconds,
+    environmentNames:
+      check.environmentAllowlist.length === 0
+        ? options.globalEnvironmentAllowlist
+        : check.environmentAllowlist
+  });
 
   let spawnError: Error | undefined;
   let timedOut = false;

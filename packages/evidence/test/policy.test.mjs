@@ -56,6 +56,17 @@ test("policy parser rejects malformed YAML, duplicate keys, unknown fields, and 
   }
 });
 
+test("version 1 policy rejects dirty-working-tree permission", async () => {
+  const root = await temporaryDirectory("donebond-policy-");
+  const text = validPolicyYaml().replace(
+    "requireCleanWorkingTree: true",
+    "requireCleanWorkingTree: false"
+  );
+  assert.throws(() => parsePolicyText(text, { repositoryRoot: root, sourcePath: "policy.yml" }), {
+    code: "POLICY_INVALID"
+  });
+});
+
 test("policy parser rejects traversal, shell wrappers, unsafe executable syntax, and NUL", async () => {
   const root = await temporaryDirectory("donebond-policy-");
   const cases = [

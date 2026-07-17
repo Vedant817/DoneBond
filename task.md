@@ -324,13 +324,13 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 5.5 `donebond verify`
 
-- [ ] Confirm task and policy hashes.
-- [ ] Collect Git state.
-- [ ] Execute checks.
-- [ ] Render concise progress and final table.
-- [ ] Produce evidence JSON even on failure for diagnostics.
-- [ ] Refuse passing status for dirty/stale commit according to policy.
-- [ ] Return nonzero exit when required verification fails.
+- [x] Confirm task and policy hashes.
+- [x] Collect Git state.
+- [x] Execute checks.
+- [x] Render concise progress and final table.
+- [x] Produce evidence JSON even on failure for diagnostics.
+- [x] Refuse passing status for dirty/stale commit according to policy.
+- [x] Return nonzero exit when required verification fails.
 
 ## 5.6 `donebond submit`
 
@@ -721,3 +721,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Bearer tokens remain outside the repository and logs; GET redirects are disabled, responses are capped at 64 KiB with fatal UTF-8 parsing, and task content is strict-schema validated. Portable path APIs leave a low same-user TOCTOU possibility if another local process swaps `.donebond` between validation and rename; the directory and leaf are validated and atomic rename limits the window.
 - Remaining risks/blockers: Real task pulling awaits task 4.5 API completion. Local contract verification and evidence generation are task 5.5.
 - Commit: `9555e7c451cb08c72d4777af9c161eb79934f0c3`.
+
+## 2026-07-17 12:34 IST — Codex/primary agent + independent evidence reviewer — 5.5
+- Branch/worktree: `main` with read-only independent review.
+- Summary: Added `donebond verify` as a real local verification workflow: it validates the pulled task and committed policy, preflights exact Git remote/branch/base/commit constraints before execution, runs direct-argv policy checks with concise progress, recollects Git state afterward, and writes canonical EvidenceBundleV1 output or an explicit diagnostic-only artifact for repository failures that the frozen public schema cannot represent.
+- Files changed: `apps/cli/**`, evidence runner progress metadata and protocol documentation, shared Policy V1 schema, policy regression tests, manifest, and tracker.
+- Verification commands: shared, evidence, and CLI build/typecheck/test; root lint/boundaries and format check; `git diff --check`; independent adversarial review and rerun.
+- Results: Shared passed 15/15, evidence passed 36/36, and CLI passed 22/22. Tests execute actual processes and cover passing/failed checks, initial dirty state, wrong remote/target branch without command execution, check-induced HEAD mutation, exact human command/table output, wrong commit, unsafe output paths, and Policy V1 rejection of dirty-tree permission. Independent re-review reports no remaining critical/high/medium findings.
+- Security/privacy notes: Commands use the reviewed shell-free evidence runner; only allowlisted environment variable names are displayed, never values. Known repository mismatches skip all commands. Policy V1 now requires a clean tree because its frozen passing semantics cannot honestly represent dirty-tree permission; `false` is rejected instead of silently producing ambiguous evidence.
+- Remaining risks/blockers: Upload and server-side commitment comparison require task 5.6 and backend evidence APIs. Live receipt anchoring remains blocked by task 3.5 external testnet credentials/network access.
+- Commit: pending.

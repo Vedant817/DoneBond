@@ -7,6 +7,7 @@ export enum ExitCode {
   Repository = 4,
   Network = 5,
   Conflict = 6,
+  Verification = 7,
   Internal = 70
 }
 
@@ -16,6 +17,7 @@ export type CliErrorCode =
   | "CONFIG_UNSAFE_PATH"
   | "POLICY_INVALID"
   | "REPOSITORY_INVALID"
+  | "VERIFICATION_FAILED"
   | "REPOSITORY_NOT_FOUND"
   | "REPOSITORY_UNSAFE_PATH"
   | "POLICY_EXISTS"

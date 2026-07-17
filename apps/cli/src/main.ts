@@ -12,6 +12,7 @@ import { initializeRepository } from "./init.js";
 import { CliOutput } from "./output.js";
 import { renderPolicySummary, validatePolicyCommand } from "./policy-command.js";
 import { pullTask } from "./task-command.js";
+import { verifyTask, type VerifyTaskResult } from "./verify-command.js";
 import { readVersion } from "./version.js";
 
 const HELP = `DoneBond CLI
@@ -25,6 +26,7 @@ Commands:
   init             Initialize DoneBond policy and optional API configuration
   policy validate  Validate and explain the deterministic verification policy
   task pull        Fetch and validate a task into the local repository
+  verify           Execute policy checks and write canonical evidence
 
 Global options:
   --json       Emit newline-delimited JSON results and errors
@@ -33,7 +35,7 @@ Global options:
 
 Exit codes:
   0 success, 2 usage, 3 configuration, 4 repository, 5 network,
-  6 conflict, 70 unexpected internal failure
+  6 conflict, 7 verification failed, 70 unexpected internal failure
 `;
 
 const INIT_HELP = `Usage: donebond init [options]
@@ -75,6 +77,18 @@ Options:
   -h, --help           Show this command help
 `;
 
+const VERIFY_HELP = `Usage: donebond verify [options]
+
+Validates the pulled task and policy, binds the exact clean Git commit, executes
+each check directly without a shell, and writes evidence even when checks fail.
+
+Options:
+  --repo <path>        Start repository discovery at path (default: current directory)
+  --commit <object-id> Require HEAD to equal this full Git object ID
+  --output <filename>  Evidence filename inside .donebond (must end .evidence.json)
+  -h, --help           Show this command help
+`;
+
 interface CliContext {
   stdin: Readable & { isTTY?: boolean; setRawMode?: (mode: boolean) => void };
   stdout: Writable;
@@ -113,6 +127,13 @@ interface TaskPullArguments {
   help: boolean;
   repo: string;
   taskId?: string;
+}
+
+interface VerifyArguments {
+  help: boolean;
+  repo: string;
+  commit?: string;
+  output?: string;
 }
 
 function optionValue(arguments_: string[], index: number, option: string): string {
@@ -255,6 +276,60 @@ function parseTaskPullArguments(
     throw new CliError("CLI_USAGE", "task pull requires a task ID.", ExitCode.Usage);
   }
   return parsed;
+}
+
+function parseVerifyArguments(arguments_: string[], defaultRepository: string): VerifyArguments {
+  const parsed: VerifyArguments = { help: false, repo: defaultRepository };
+  const seen = new Set<string>();
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === undefined) continue;
+    const canonical = argument === "-h" ? "--help" : argument;
+    if (seen.has(canonical)) {
+      throw new CliError("CLI_USAGE", "A verify option was provided twice.", ExitCode.Usage);
+    }
+    seen.add(canonical);
+    switch (canonical) {
+      case "--help":
+        parsed.help = true;
+        break;
+      case "--repo":
+        parsed.repo = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      case "--commit":
+        parsed.commit = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      case "--output":
+        parsed.output = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      default:
+        throw new CliError("CLI_USAGE", "Unknown verify option.", ExitCode.Usage);
+    }
+  }
+  return parsed;
+}
+
+function renderVerificationResult(result: VerifyTaskResult): string {
+  const lines = [
+    result.passing ? "Verification passed." : "Verification failed.",
+    `Commit: ${result.git.objectId}`,
+    `Commit hash: ${result.git.derivedCommitHash}`,
+    `Evidence: ${result.evidenceHash ?? "diagnostic-only"}`,
+    `Output: ${result.outputPath}`
+  ];
+  if (result.failureCodes.length > 0) {
+    lines.push(`Failures: ${result.failureCodes.join(", ")}`);
+  }
+  lines.push("Checks:");
+  for (const check of result.checks) {
+    lines.push(
+      `  ${check.key.padEnd(20)} ${check.status.padEnd(10)} exit=${check.exitCode ?? "-"} duration=${check.durationMs}ms`
+    );
+  }
+  return lines.join("\n");
 }
 
 async function readStdinToken(input: Readable): Promise<string> {
@@ -444,6 +519,45 @@ async function execute(
       manifestPath: result.manifestPath
     });
     return ExitCode.Success;
+  }
+  if (filtered[0] === "verify") {
+    const verifyArguments = parseVerifyArguments(filtered.slice(1), context.cwd);
+    if (verifyArguments.help) {
+      output.result(VERIFY_HELP.trimEnd());
+      return ExitCode.Success;
+    }
+    const json = arguments_.includes("--json");
+    const result = await verifyTask({
+      startDirectory: verifyArguments.repo,
+      ...(verifyArguments.commit === undefined ? {} : { expectedCommit: verifyArguments.commit }),
+      ...(verifyArguments.output === undefined ? {} : { outputPath: verifyArguments.output }),
+      environment: context.environment,
+      onProgress: (event) => {
+        const humanProgress =
+          event.type === "check-started"
+            ? `Running ${event.key}\n  executable: ${JSON.stringify(event.executable)}\n  args: ${JSON.stringify(event.args)}\n  cwd: ${event.cwd}\n  timeout: ${event.timeoutSeconds}s\n  environment: ${event.environmentNames.join(", ") || "none"}`
+            : `Finished ${event.key}: ${event.status}`;
+        context.stderr.write(json ? `${JSON.stringify(event)}\n` : `${humanProgress}\n`);
+      }
+    });
+    output.result(renderVerificationResult(result), {
+      passing: result.passing,
+      diagnosticOnly: result.diagnosticOnly,
+      taskId: result.task.publicId,
+      commit: result.git.objectId,
+      commitHash: result.git.derivedCommitHash,
+      outputPath: result.outputPath,
+      ...(result.evidenceHash === undefined ? {} : { evidenceHash: result.evidenceHash }),
+      failureCodes: result.failureCodes,
+      checks: result.checks.map((check) => ({
+        key: check.key,
+        required: check.required,
+        status: check.status,
+        durationMs: check.durationMs,
+        exitCode: check.exitCode
+      }))
+    });
+    return result.passing ? ExitCode.Success : ExitCode.Verification;
   }
   if (filtered[0] !== "init") {
     throw new CliError(

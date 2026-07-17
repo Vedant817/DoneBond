@@ -63,38 +63,22 @@ async function withApiServer(handler) {
 }
 
 function taskFixture(policyHash, overrides = {}) {
-  const canonical = {
-    kind: "donebond.task",
-    schemaVersion: 1,
-    projectPublicId: "project_123",
-    repositoryIdentity: "github.com/Vedant817/example",
-    targetBranch: "main",
-    baseCommit: null,
-    title: "Verify the implementation",
-    description: "Run the deterministic DoneBond policy.",
-    acceptanceCriteria: [{ key: "tests", description: "All required checks pass." }],
-    assigneeWallet: "0x2222222222222222222222222222222222222222",
-    deadlineUnixSeconds: null,
-    rewardWei: "0",
-    policyHash
-  };
-  return {
+  const task = {
     schemaVersion: 1,
     publicId: "task_123",
-    projectPublicId: canonical.projectPublicId,
+    projectPublicId: "project_123",
     chainId: 10143,
     chainTaskId: null,
-    title: canonical.title,
-    description: canonical.description,
+    title: "Verify the implementation",
+    description: "Run the deterministic DoneBond policy.",
     repositoryUrl: "https://github.com/Vedant817/example.git",
-    targetBranch: canonical.targetBranch,
-    baseCommit: canonical.baseCommit,
-    acceptanceCriteria: canonical.acceptanceCriteria,
-    taskHash: hashCanonicalTask(canonical),
+    targetBranch: "main",
+    baseCommit: null,
+    acceptanceCriteria: [{ key: "tests", description: "All required checks pass." }],
     policyHash,
     creatorWallet: "0x1111111111111111111111111111111111111111",
-    assigneeWallet: canonical.assigneeWallet,
-    rewardWei: canonical.rewardWei,
+    assigneeWallet: "0x2222222222222222222222222222222222222222",
+    rewardWei: "0",
     deadline: null,
     offchainStatus: "open",
     chainStatus: "open",
@@ -102,6 +86,71 @@ function taskFixture(policyHash, overrides = {}) {
     updatedAt: "2026-07-17T05:30:00.000Z",
     ...overrides
   };
+  const taskHash = Object.hasOwn(overrides, "taskHash")
+    ? overrides.taskHash
+    : hashCanonicalTask({
+        kind: "donebond.task",
+        schemaVersion: 1,
+        projectPublicId: task.projectPublicId,
+        repositoryIdentity: `${new URL(task.repositoryUrl).hostname}/${new URL(task.repositoryUrl).pathname.replace(/^\/+|\.git$/gu, "")}`,
+        targetBranch: task.targetBranch,
+        baseCommit: task.baseCommit,
+        title: task.title,
+        description: task.description,
+        acceptanceCriteria: task.acceptanceCriteria,
+        assigneeWallet: task.assigneeWallet,
+        deadlineUnixSeconds: null,
+        rewardWei: task.rewardWei,
+        policyHash: task.policyHash
+      });
+  return { ...task, taskHash };
+}
+
+async function verificationFixture(exitCode = 0, taskOverrides = {}, script) {
+  const root = await gitRepository();
+  await execFile("git", ["-C", root, "branch", "-M", "main"]);
+  await initializeRepository({ startDirectory: root, force: false });
+  const policyText = `schemaVersion: 1
+repository:
+  requireCleanWorkingTree: true
+  allowedBranches: [main]
+  expectedRemoteOwner: Vedant817
+checks:
+  - key: test
+    label: Test
+    executable: node
+    args: ["-e", ${JSON.stringify(script ?? `process.exit(${exitCode})`)}]
+    cwd: .
+    timeoutSeconds: 10
+    required: true
+    maxOutputBytes: 4096
+    environmentAllowlist: [PATH]
+environment:
+  allow: [PATH]
+redaction:
+  additionalPatterns: []
+`;
+  await writeFile(join(root, ".donebond", "policy.yml"), policyText, "utf8");
+  await writeFile(join(root, "implementation.txt"), "verified content\n", "utf8");
+  await execFile("git", ["-C", root, "config", "user.name", "DoneBond Test"]);
+  await execFile("git", ["-C", root, "config", "user.email", "donebond-test@example.invalid"]);
+  await execFile("git", [
+    "-C",
+    root,
+    "remote",
+    "add",
+    "origin",
+    "git@github.com:Vedant817/example.git"
+  ]);
+  await execFile("git", ["-C", root, "add", "."]);
+  await execFile("git", ["-C", root, "commit", "--quiet", "-m", "test fixture"]);
+  const commit = (await execFile("git", ["-C", root, "rev-parse", "HEAD"])).stdout.trim();
+  const policy = await parsePolicyFile(join(root, ".donebond", "policy.yml"), root);
+  const task = taskFixture(policy.policyHash, taskOverrides);
+  await writeFile(join(root, ".donebond", "task.json"), `${JSON.stringify(task, null, 2)}\n`, {
+    mode: 0o600
+  });
+  return { root, commit, task };
 }
 
 test("help, version, JSON errors, and stable exit codes contain no secret input", async () => {
@@ -351,6 +400,156 @@ test("task pull rejects a symlinked .donebond parent without touching source", a
     ExitCode.Repository
   );
   assert.equal(await readFile(join(sourceDirectory, "task.json"), "utf8"), "source sentinel\n");
+});
+
+test("verify executes real checks and writes independently hashable passing evidence", async () => {
+  const { root, commit, task } = await verificationFixture(0);
+  const stdout = captureStream();
+  const stderr = captureStream();
+  assert.equal(
+    await runCli(["verify", "--repo", root, "--commit", commit, "--json"], {
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      environment: { PATH: process.env.PATH }
+    }),
+    ExitCode.Success
+  );
+  const result = JSON.parse(stdout.value());
+  assert.equal(result.passing, true);
+  assert.equal(result.diagnosticOnly, false);
+  assert.match(result.evidenceHash, /^0x[0-9a-f]{64}$/u);
+  assert.match(stderr.value(), /check-started/u);
+  const evidence = JSON.parse(
+    await readFile(join(root, ".donebond", `${task.publicId}.evidence.json`), "utf8")
+  );
+  assert.equal(evidence.result.passing, true);
+  assert.equal(evidence.git.objectId, commit);
+  assert.equal(evidence.task.taskHash, task.taskHash);
+});
+
+test("verify returns nonzero and still writes evidence for failed checks and dirty Git", async () => {
+  const failed = await verificationFixture(2);
+  assert.equal(
+    await runCli(["verify", "--repo", failed.root], {
+      stdout: captureStream().stream,
+      stderr: captureStream().stream,
+      environment: { PATH: process.env.PATH }
+    }),
+    ExitCode.Verification
+  );
+  const failedEvidence = JSON.parse(
+    await readFile(join(failed.root, ".donebond", `${failed.task.publicId}.evidence.json`), "utf8")
+  );
+  assert.equal(failedEvidence.result.passing, false);
+  assert.equal(failedEvidence.checks[0].status, "failed");
+
+  const dirty = await verificationFixture(0);
+  await writeFile(join(dirty.root, "implementation.txt"), "dirty content\n", "utf8");
+  assert.equal(
+    await runCli(["verify", "--repo", dirty.root], {
+      stdout: captureStream().stream,
+      stderr: captureStream().stream,
+      environment: { PATH: process.env.PATH }
+    }),
+    ExitCode.Verification
+  );
+  const dirtyEvidence = JSON.parse(
+    await readFile(join(dirty.root, ".donebond", `${dirty.task.publicId}.evidence.json`), "utf8")
+  );
+  assert.equal(dirtyEvidence.diagnosticOnly, true);
+  assert.equal(dirtyEvidence.checks[0].status, "skipped");
+  assert.ok(dirtyEvidence.failureCodes.includes("GIT_DIRTY"));
+});
+
+test("verify preflight rejects wrong task branch and remote without executing checks", async () => {
+  const markerScript = 'require("node:fs").writeFileSync("executed.marker", "executed")';
+  for (const overrides of [
+    { targetBranch: "release" },
+    { repositoryUrl: "https://github.com/Vedant817/other.git" }
+  ]) {
+    const fixture = await verificationFixture(0, overrides, markerScript);
+    assert.equal(
+      await runCli(["verify", "--repo", fixture.root], {
+        stdout: captureStream().stream,
+        stderr: captureStream().stream,
+        environment: { PATH: process.env.PATH }
+      }),
+      ExitCode.Verification
+    );
+    await assert.rejects(readFile(join(fixture.root, "executed.marker")), { code: "ENOENT" });
+    const diagnostic = JSON.parse(
+      await readFile(
+        join(fixture.root, ".donebond", `${fixture.task.publicId}.evidence.json`),
+        "utf8"
+      )
+    );
+    assert.equal(diagnostic.diagnosticOnly, true);
+    assert.equal(diagnostic.checks[0].status, "skipped");
+  }
+});
+
+test("verify writes diagnostics if a check changes HEAD", async () => {
+  const script =
+    'require("node:child_process").execFileSync("git", ["commit", "--allow-empty", "-m", "changed head"])';
+  const fixture = await verificationFixture(0, {}, script);
+  assert.equal(
+    await runCli(["verify", "--repo", fixture.root], {
+      stdout: captureStream().stream,
+      stderr: captureStream().stream,
+      environment: { PATH: process.env.PATH }
+    }),
+    ExitCode.Verification
+  );
+  const diagnostic = JSON.parse(
+    await readFile(
+      join(fixture.root, ".donebond", `${fixture.task.publicId}.evidence.json`),
+      "utf8"
+    )
+  );
+  assert.equal(diagnostic.diagnosticOnly, true);
+  assert.deepEqual(diagnostic.failureCodes, ["GIT_STATE_CHANGED_DURING_VERIFICATION"]);
+});
+
+test("verify human output shows exact command before execution and a final result table", async () => {
+  const fixture = await verificationFixture(0);
+  const stdout = captureStream();
+  const stderr = captureStream();
+  assert.equal(
+    await runCli(["verify", "--repo", fixture.root], {
+      stdout: stdout.stream,
+      stderr: stderr.stream,
+      environment: { PATH: process.env.PATH }
+    }),
+    ExitCode.Success
+  );
+  assert.match(stderr.value(), /executable: "node"/u);
+  assert.match(stderr.value(), /args: \["-e","process\.exit\(0\)"\]/u);
+  assert.match(stderr.value(), /cwd: \./u);
+  assert.match(stderr.value(), /timeout: 10s/u);
+  assert.match(stdout.value(), /Commit hash: 0x[0-9a-f]{64}/u);
+  assert.match(stdout.value(), /Evidence: 0x[0-9a-f]{64}/u);
+  assert.match(stdout.value(), /Checks:/u);
+  assert.match(stdout.value(), /test\s+passed/u);
+});
+
+test("verify rejects an incorrect commit and unsafe output before execution", async () => {
+  const { root } = await verificationFixture(0);
+  assert.equal(
+    await runCli(["verify", "--repo", root, "--commit", "0".repeat(40)], {
+      stdout: captureStream().stream,
+      stderr: captureStream().stream,
+      environment: { PATH: process.env.PATH }
+    }),
+    ExitCode.Repository
+  );
+  assert.equal(
+    await runCli(["verify", "--repo", root, "--output", "../escape.evidence.json"], {
+      stdout: captureStream().stream,
+      stderr: captureStream().stream,
+      environment: { PATH: process.env.PATH }
+    }),
+    ExitCode.Repository
+  );
 });
 
 test("init refuses overwrite unless forced and updates gitignore idempotently", async () => {

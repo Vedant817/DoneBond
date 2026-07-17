@@ -27,13 +27,13 @@ export interface PulledTask {
   readonly task: Task;
 }
 
-function repositoryIdentity(repositoryUrl: string): string {
+export function repositoryIdentity(repositoryUrl: string): string {
   const url = new URL(repositoryUrl);
   const pathname = url.pathname.replace(/^\/+|\/+$/gu, "").replace(/\.git$/iu, "");
   return RepositoryIdentitySchema.parse(`${url.hostname.toLowerCase()}/${pathname}`);
 }
 
-function canonicalTaskHash(task: Task): `0x${string}` {
+export function canonicalTaskHash(task: Task): `0x${string}` {
   const deadlineUnixSeconds =
     task.deadline === null ? null : Math.floor(new Date(task.deadline).getTime() / 1000).toString();
   return hashCanonicalTask({
@@ -79,7 +79,7 @@ async function atomicManifestWrite(path: string, task: Task): Promise<void> {
   }
 }
 
-async function requireSafeDonebondDirectory(repositoryRoot: string): Promise<string> {
+export async function requireSafeDonebondDirectory(repositoryRoot: string): Promise<string> {
   const directory = join(repositoryRoot, ".donebond");
   let stats;
   try {
