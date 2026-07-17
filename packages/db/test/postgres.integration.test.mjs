@@ -426,10 +426,12 @@ test(
       await client`
         INSERT INTO tasks (
           project_id, public_id, policy_id, chain_id, contract_address, title, description,
-          acceptance_criteria_json, task_hash, policy_hash, creator_wallet, assignee_wallet
+          canonical_json, target_branch, base_commit, acceptance_criteria_json,
+          task_hash, policy_hash, creator_wallet, assignee_wallet
         ) VALUES (
           ${managedIds.project_id}, '01arz3ndektsv4rrffq69g5fat', ${managedIds.policy_id}, 10143,
           ${`0x${"1".repeat(40)}`}, 'Immutable repository task', 'Integration task',
+          ${client.json({ kind: "donebond.task", schemaVersion: 1 })}, 'main', NULL,
           ${client.json([{ text: "Tests pass" }])}, ${`0x${"c".repeat(64)}`},
           ${managedPolicyHash}, ${`0x${"2".repeat(40)}`}, ${`0x${"3".repeat(40)}`}
         )

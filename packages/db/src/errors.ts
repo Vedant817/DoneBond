@@ -6,7 +6,8 @@ export type DatabaseErrorCode =
   | "DB_POLICY_HASH_CONFLICT"
   | "DB_PROJECT_ARCHIVED"
   | "DB_PROJECT_SLUG_CONFLICT"
-  | "DB_REPOSITORY_IMMUTABLE";
+  | "DB_REPOSITORY_IMMUTABLE"
+  | "DB_TASK_HASH_CONFLICT";
 
 export class DatabaseServiceError extends Error {
   public readonly code: DatabaseErrorCode;
@@ -36,6 +37,13 @@ export function translateDatabaseError(error: unknown): DatabaseServiceError {
       return new DatabaseServiceError(
         "DB_POLICY_HASH_CONFLICT",
         "This policy hash already identifies an immutable project policy",
+        { cause: error }
+      );
+    }
+    if (constraint === "tasks_project_hash_unique") {
+      return new DatabaseServiceError(
+        "DB_TASK_HASH_CONFLICT",
+        "This task hash already identifies a project task",
         { cause: error }
       );
     }

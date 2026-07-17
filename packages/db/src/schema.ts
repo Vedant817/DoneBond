@@ -409,6 +409,9 @@ export const tasks = pgTable(
     chainTaskId: bigint("chain_task_id", { mode: "bigint" }),
     title: varchar("title", { length: 200 }).notNull(),
     description: text("description").notNull(),
+    canonicalJson: jsonb("canonical_json").notNull(),
+    targetBranch: varchar("target_branch", { length: 255 }).notNull(),
+    baseCommit: varchar("base_commit", { length: 64 }),
     acceptanceCriteriaJson: jsonb("acceptance_criteria_json").notNull(),
     taskHash: varchar("task_hash", { length: 66 }).notNull(),
     policyHash: varchar("policy_hash", { length: 66 }).notNull(),
@@ -425,6 +428,7 @@ export const tasks = pgTable(
   },
   (table) => [
     unique("tasks_public_id_unique").on(table.publicId),
+    unique("tasks_project_hash_unique").on(table.projectId, table.taskHash),
     unique("tasks_id_project_unique").on(table.id, table.projectId),
     unique("tasks_id_policy_project_unique").on(table.id, table.policyId, table.projectId),
     foreignKey({
@@ -445,6 +449,14 @@ export const tasks = pgTable(
     check("tasks_creator_wallet_format", sql`${table.creatorWallet} ~ '^0x[0-9a-f]{40}$'`),
     check("tasks_assignee_wallet_format", sql`${table.assigneeWallet} ~ '^0x[0-9a-f]{40}$'`),
     check("tasks_reward_nonnegative", sql`${table.rewardWei} >= 0`),
+    check(
+      "tasks_target_branch_safe",
+      sql`${table.targetBranch} <> '' and ${table.targetBranch} not like '-%' and ${table.targetBranch} not like '/%' and ${table.targetBranch} not like '%/' and ${table.targetBranch} not like '.%' and ${table.targetBranch} not like '%/.%' and ${table.targetBranch} not like '%.lock' and ${table.targetBranch} not like '%.lock/%' and ${table.targetBranch} not like '%..%' and ${table.targetBranch} not like '%@{%' and ${table.targetBranch} not like '%//%' and ${table.targetBranch} !~ '[[:cntrl:] ~^:?*]' and position(chr(92) in ${table.targetBranch}) = 0 and position('[' in ${table.targetBranch}) = 0`
+    ),
+    check(
+      "tasks_base_commit_format",
+      sql`${table.baseCommit} is null or ${table.baseCommit} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    ),
     check(
       "tasks_hashes_format",
       sql`${table.taskHash} ~ '^0x[0-9a-f]{64}$' and ${table.policyHash} ~ '^0x[0-9a-f]{64}$'`
@@ -561,6 +573,8 @@ export const chainTransactions = pgTable(
     blockNumber: bigint("block_number", { mode: "bigint" }),
     failureCode: varchar("failure_code", { length: 100 }),
     replacedByTransactionId: uuid("replaced_by_transaction_id"),
+    responseSafeJson: jsonb("response_safe_json"),
+    responseStatus: integer("response_status"),
     createdAt,
     updatedAt
   },
@@ -622,6 +636,10 @@ export const chainTransactions = pgTable(
     check(
       "chain_transactions_replacement_state_consistent",
       sql`(${table.status} = 'replaced' and ${table.replacedByTransactionId} is not null) or (${table.status} <> 'replaced' and ${table.replacedByTransactionId} is null)`
+    ),
+    check(
+      "chain_transactions_response_complete",
+      sql`(${table.responseSafeJson} is null and ${table.responseStatus} is null) or (${table.responseSafeJson} is not null and ${table.responseStatus} between 200 and 299)`
     )
   ]
 );
