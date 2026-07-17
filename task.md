@@ -310,10 +310,10 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 5.3 `donebond policy validate`
 
-- [ ] Parse and display checks.
-- [ ] Show exact executable/args/cwd/timeout.
-- [ ] Explain unsafe or unsupported fields.
-- [ ] Print policy hash.
+- [x] Parse and display checks.
+- [x] Show exact executable/args/cwd/timeout.
+- [x] Explain unsafe or unsupported fields.
+- [x] Print policy hash.
 
 ## 5.4 `donebond task pull`
 
@@ -691,3 +691,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Tokens are never accepted on argv, never printed, and persist only at mode 0600 beneath mode 0700 directories on supported POSIX systems. API URLs reject credentials, query, fragments, and insecure non-local transport. Portable Node filesystem APIs cannot eliminate every TOCTOU race, so ownership, symlink, and permission checks are repeated immediately around operations.
 - Remaining risks/blockers: The local config uses OS filesystem protection rather than a platform keychain; a keychain backend is a post-MVP hardening option. Remaining CLI verification, upload, receipt, and distribution commands are tasks 5.3–5.8.
 - Commit: `f9a3b9925f508c3b4f53f11868663f800d912f05`.
+
+## 2026-07-17 11:31 IST — Codex/primary implementation agent — 5.3
+- Branch/worktree: `main`.
+- Summary: Added `donebond policy validate` to parse the real strict evidence policy without executing it, show each check's exact executable, argument vector, working directory, timeout and required state, and print the RFC 8785-derived policy commitment in human or structured JSON output.
+- Files changed: `apps/cli/**`, shared/evidence build wiring, manifest, and tracker.
+- Verification commands: `pnpm --filter @donebond/cli test`; CLI typecheck; root lint/boundaries; root format check; tracked secret scan; `git diff --check`; focused unsafe-command and outside-repository policy tests.
+- Results: CLI suite passed 12/12. Valid policy output reproduces a stable 32-byte policy hash and exact execution parameters. Shell-wrapper policy and a policy outside the repository fail with stable configuration/repository exit codes and actionable evidence-engine messages. Package runtime imports the reviewed workspace exports rather than internal build paths.
+- Security/privacy notes: Validation never executes a policy command. Existing realpath containment, strict schema, duplicate-key rejection, shell-wrapper rejection, and safe error rendering remain authoritative. A delegated review attempt was unavailable, so the primary reran focused acceptance and workspace gates directly.
+- Remaining risks/blockers: Task pull, command execution/evidence generation, upload, and independent receipt verification remain tasks 5.4–5.7.
+- Commit: `1f8025f755e8c48122152713dded93b06b8c72a0`.
