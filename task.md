@@ -77,13 +77,13 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 1.2 Continuous integration
 
-- [ ] Add CI for install with frozen lockfile.
-- [ ] Run format, lint, typecheck, unit tests, contract tests, and build.
-- [ ] Add an optional e2e job with deterministic services.
-- [ ] Cache dependencies safely.
-- [ ] Pin third-party actions where practical.
-- [ ] Add secret scanning and dependency audit.
-- [ ] Ensure CI does not require production secrets for pull requests.
+- [x] Add CI for install with frozen lockfile.
+- [x] Run format, lint, typecheck, unit tests, contract tests, and build.
+- [x] Add an optional e2e job with deterministic services.
+- [x] Cache dependencies safely.
+- [x] Pin third-party actions where practical.
+- [x] Add secret scanning and dependency audit.
+- [x] Ensure CI does not require production secrets for pull requests.
 
 **Verification:** CI passes on the initial scaffold and fails on an intentionally broken test in a temporary validation branch.
 
@@ -641,3 +641,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Evidence status is derived fail-closed from required check/process outcomes; canonical public repository identity cannot carry credentials; mixed-case EVM checksums are validated before lowercase commitment encoding; RPC credentials are rejected; verifier integrity requires trusted deployment configuration.
 - Remaining risks/blockers: Canonical hashing execution and frozen evidence vectors are task 2.5. EIP-712 verifier availability/key rotation remains an explicit MVP operational dependency. Remote publication remains blocked by missing personal GitHub SSH authorization.
 - Commit: `1ffd64b2a0e518f36f871619357fdcf5c0ee08c5`
+
+## 2026-07-17 10:31 IST — CI engineer + Codex/integrator — 1.2
+- Branch/worktree: `feat/ci` in `/Users/salescode/Documents/Code/DoneBond-ci`, integrated to `main`.
+- Summary: Added least-privilege CI with frozen installs, SHA-pinned actions, safe pnpm caching, isolated quality/contract/security jobs, deterministic optional e2e, a redaction-safe tracked-history secret scanner, production dependency audit, and local security command aliases. Root JavaScript gates intentionally exclude Foundry and run the contract suite through its dedicated pinned toolchain job.
+- Files changed: `.github/workflows/ci.yml`, `scripts/scan-secrets.mjs`, `scripts/ci/scan-secrets.test.mjs`, root scripts, manifest, and tracker.
+- Verification commands: Full local format/lint/typecheck/unit/build/contract/e2e gates; `actionlint 1.7.10`; scanner unit tests; history scan; `pnpm audit --prod --audit-level=critical`; intentionally broken temporary test followed by restoration.
+- Results: Local quality suite passed; contract suite passed 28/28; Playwright passed 1/1; scanner passed 4/4 and scanned 148 tracked/history files without exposing match values; actionlint passed; intentional broken test failed as required; audit passed the critical threshold with one known moderate PostCSS advisory.
+- Security/privacy notes: Workflow permissions are read-only, checkout credentials are not persisted, production secrets are not referenced for pull requests, and action revisions/tool versions are pinned.
+- Remaining risks/blockers: A hosted GitHub Actions run cannot be observed until the external `Vedant817/donebond` repository and personal SSH authentication are available; local workflow validation is complete.
+- Commit: `75154c36d7c143607988fa45c9f2a7db50e5c913`; root-script integration pending in this changeset.
