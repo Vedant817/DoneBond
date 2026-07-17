@@ -66,6 +66,12 @@ export interface BrowserSessionStore {
     tokenDigest: string,
     accessedAt: Date
   ): Promise<StoredBrowserSession | null>;
+  /** Atomically validates both digests before advancing the idle expiry. */
+  findActiveByTokenAndCsrfDigest(
+    tokenDigest: string,
+    csrfDigest: string,
+    accessedAt: Date
+  ): Promise<StoredBrowserSession | null>;
   revoke(tokenDigest: string, revokedAt: Date): Promise<boolean>;
 }
 
@@ -251,17 +257,23 @@ export class WalletAuthService {
     const token = this.sessionToken(cookieHeader);
     const now = this.#now();
     const session =
-      token === null
+      token === null || csrfToken === null
         ? null
-        : await this.#sessions.findActiveByTokenDigest(keyedDigest(token, this.#key), now);
-    if (
-      session === null ||
-      csrfToken === null ||
-      !constantTimeHexEqual(session.csrfDigest, keyedDigest(csrfToken, this.#key))
-    ) {
+        : await this.#sessions.findActiveByTokenAndCsrfDigest(
+            keyedDigest(token, this.#key),
+            keyedDigest(csrfToken, this.#key),
+            now
+          );
+    if (session === null) {
       throw new HttpError(ERROR_CODES.AUTH_CSRF_INVALID, "CSRF validation failed", 403);
     }
-    return this.authenticate(cookieHeader);
+    return {
+      sessionId: session.id,
+      userId: session.userId,
+      address: session.address,
+      chainId: session.chainId,
+      absoluteExpiresAt: session.absoluteExpiresAt
+    };
   }
 
   async revoke(cookieHeader: string | null): Promise<boolean> {

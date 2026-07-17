@@ -15,6 +15,21 @@
 
 Use a secure session with HTTP-only, secure, same-site cookies. State-changing browser requests require CSRF protection where relevant.
 
+Wallet authentication routes:
+
+```text
+POST /api/v1/auth/challenge
+POST /api/v1/auth/verify
+GET  /api/v1/auth/session
+POST /api/v1/auth/logout
+```
+
+Challenge and verification requests require the exact configured application
+`Origin`. Verification sets an opaque HTTP-only session cookie and returns a
+separate CSRF token for the browser to retain in memory. Logout requires that
+token in `X-CSRF-Token`. Only keyed token/CSRF digests and a one-time nonce digest
+are persisted; invalid CSRF attempts do not renew idle session lifetime.
+
 ### CLI
 
 Use a randomly generated project-scoped token. Store only a strong hash of the token server-side. The token is displayed once, can be revoked, has a last-used timestamp, and cannot manage billing or organization settings.

@@ -8,6 +8,10 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
+overrides:
+  postcss: 8.5.19
+  ws: 8.21.1
+
 catalog:
   "@types/node": 26.1.1
   typescript: 5.9.3

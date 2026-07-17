@@ -231,8 +231,8 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 4.2 Authentication and authorization
 
-- [-] Implement secure browser authentication. (Primary agent, `main`; cryptographic/session foundation complete, persistence/routes pending.)
-- [ ] Implement wallet ownership association/signature challenge if used.
+- [x] Implement secure browser authentication.
+- [x] Implement wallet ownership association/signature challenge if used.
 - [ ] Add project ownership/member checks.
 - [ ] Add authorization matrix tests.
 - [ ] Ensure public endpoints use a strict field allowlist.
@@ -730,4 +730,14 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Results: Shared passed 15/15, evidence passed 36/36, and CLI passed 22/22. Tests execute actual processes and cover passing/failed checks, initial dirty state, wrong remote/target branch without command execution, check-induced HEAD mutation, exact human command/table output, wrong commit, unsafe output paths, and Policy V1 rejection of dirty-tree permission. Independent re-review reports no remaining critical/high/medium findings.
 - Security/privacy notes: Commands use the reviewed shell-free evidence runner; only allowlisted environment variable names are displayed, never values. Known repository mismatches skip all commands. Policy V1 now requires a clean tree because its frozen passing semantics cannot honestly represent dirty-tree permission; `false` is rejected instead of silently producing ambiguous evidence.
 - Remaining risks/blockers: Upload and server-side commitment comparison require task 5.6 and backend evidence APIs. Live receipt anchoring remains blocked by task 3.5 external testnet credentials/network access.
-- Commit: pending.
+- Commit: `e194d670ce259c6f7d23c6402f0edac8c98b34c2`.
+
+## 2026-07-17 12:40 IST — Database engineer + Codex/integrator + independent security reviewer — 4.2 (partial)
+- Branch/worktree: auth persistence on `feat/auth-persistence`, integrated and route-wired on `main`; independent read-only review.
+- Summary: Implemented one-time wallet-signature challenges, normalized wallet ownership association, opaque HTTP-only browser sessions, keyed token/CSRF digests, atomic replay/expiry/revocation and CSRF-conditioned renewal, strict bounded auth routes, stable errors, origin enforcement, logout, safe public projections, and shared PostgreSQL rate limits with per-subject and global ceilings. The independent review's process-local rate-limit HIGH and origin/bootstrap/internal-ID findings were remediated before commit.
+- Files changed: `packages/db` auth schema/migrations/repositories/rate limiting/tests; `apps/web` auth service, route handlers, startup validation, runtime adapters, and tests; environment/API/security documentation; dependency overrides, a contention-safe evidence test timeout, lockfile, manifest, and tracker.
+- Verification commands: DB build/typecheck/test and migration freshness; web test/typecheck/production build; root typecheck/test/build/lint/format; frozen install; high-threshold production audit; history secret scan; `git diff --check`; independent adversarial review and remediation review.
+- Results: DB passed 33/34 with only the explicitly guarded real-PostgreSQL test skipped; web passed 17/17 after remediation; all four auth routes compile as dynamic Node routes, and the production pre-start command exits nonzero before Next launches when auth or database configuration is invalid. Root test/build passed after a heavily contended runner-test retry; frozen install passed; production audit reports no known vulnerabilities after pinning patched `ws` 8.21.1 and PostCSS 8.5.19; history secret scan passed. Exact multi-instance database concurrency still awaits the guarded PostgreSQL run.
+- Security/privacy notes: Nonces, session tokens, CSRF tokens, and rate-limit subjects persist only as digests. Wrong CSRF cannot extend idle lifetime. API responses omit user/session database UUIDs. PostgreSQL fixed-window upserts enforce limits across instances and opportunistically remove bounded expired batches. Every login issues fresh tokens; periodic active-session rotation remains an accepted documented MVP risk under 12-hour absolute/one-hour idle expiry.
+- Remaining risks/blockers: A disposable PostgreSQL service is still unavailable, so migrations and concurrency have not executed against a real server. Project/member authorization matrix and public field-allowlist coverage remain incomplete child items in 4.2. Runtime deployment configuration and live wallet-browser exercise remain later integration/deployment gates.
+- Commit: DB persistence `ee2d0b1`, CSRF hardening `96709d8`, durable rate limiting `1eb8f1f`; web integration pending.

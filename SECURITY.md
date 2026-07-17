@@ -79,6 +79,14 @@ Apply redaction before persistence and hashing of the public/safe bundle.
 - Secure cookies and session rotation.
 - Audit events for token creation/revocation, task lifecycle, evidence upload, and chain actions.
 
+Accepted MVP browser-session risk: every successful wallet challenge issues a
+fresh, independently random session and CSRF token with a 12-hour absolute and
+one-hour idle lifetime, but active sessions are not periodically rotated. Logout
+revokes the persisted digest. Periodic rotation and predecessor lineage are
+reserved for a later version because the MVP has no privilege-elevation boundary;
+the database retains a rotation lineage field so that this can be added without a
+destructive migration.
+
 ## Smart-contract security
 
 - Checks-effects-interactions.

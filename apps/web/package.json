@@ -6,7 +6,8 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev --port 3100",
-    "start": "next start --port 3100",
+    "start": "pnpm start:validate && next start --port 3100",
+    "start:validate": "node --experimental-strip-types src/server/validate-startup.ts",
     "test": "node --test --experimental-strip-types src/server/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

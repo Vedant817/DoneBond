@@ -147,7 +147,11 @@ export function requireTrustedOrigin(request: Request, applicationOrigin: string
     throw new HttpError(ERROR_CODES.AUTH_CSRF_INVALID, "Request origin is missing or invalid", 403);
   }
   if (
-    applicationOrigin !== expected.origin ||
+    expected.username !== "" ||
+    expected.password !== "" ||
+    expected.pathname !== "/" ||
+    expected.search !== "" ||
+    expected.hash !== "" ||
     actualHeader !== actual.origin ||
     expected.origin !== actual.origin
   ) {

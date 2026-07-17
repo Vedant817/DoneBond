@@ -103,7 +103,10 @@ test("runner redacts output before returning and exposes only category counts", 
   const root = await temporaryDirectory("donebond-runner-");
   const secret = `ghp_${"abcdefghijklmnopqrstuvwxyz"}${"1234567890"}`;
   const result = await runCheck(
-    check({ args: ["-e", `process.stdout.write(${JSON.stringify(secret)})`] }),
+    check({
+      args: ["-e", `process.stdout.write(${JSON.stringify(secret)})`],
+      timeoutSeconds: 30
+    }),
     options(root)
   );
   assert.equal(result.stdout.preview.includes(secret), false);

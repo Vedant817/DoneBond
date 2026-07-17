@@ -76,6 +76,7 @@ test("trusted-origin enforcement is exact and fail closed", () => {
     headers: { origin: "https://donebond.test" }
   });
   assert.doesNotThrow(() => requireTrustedOrigin(accepted, "https://donebond.test"));
+  assert.doesNotThrow(() => requireTrustedOrigin(accepted, "https://DONEBOND.TEST/"));
   assert.throws(() => requireTrustedOrigin(accepted, "https://donebond.test/path"), {
     code: ERROR_CODES.AUTH_CSRF_INVALID,
     status: 403

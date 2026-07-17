@@ -44,13 +44,26 @@ class MemoryChallenges implements ChallengeStore {
 
 class MemorySessions implements BrowserSessionStore {
   readonly records = new Map<string, StoredBrowserSession>();
+  activeTouches = 0;
+  csrfTouches = 0;
 
   async create(session: StoredBrowserSession): Promise<void> {
     this.records.set(session.tokenDigest, session);
   }
 
   async findActiveByTokenDigest(tokenDigest: string): Promise<StoredBrowserSession | null> {
+    this.activeTouches += 1;
     return this.records.get(tokenDigest) ?? null;
+  }
+
+  async findActiveByTokenAndCsrfDigest(
+    tokenDigest: string,
+    csrfDigest: string
+  ): Promise<StoredBrowserSession | null> {
+    const session = this.records.get(tokenDigest);
+    if (session?.csrfDigest !== csrfDigest) return null;
+    this.csrfTouches += 1;
+    return session;
   }
 
   async revoke(tokenDigest: string): Promise<boolean> {
@@ -108,7 +121,9 @@ test("valid signature creates opaque persisted session and replay fails", async 
   await assert.rejects(service.requireCsrf(verified.cookie, "wrong-token"), {
     code: ERROR_CODES.AUTH_CSRF_INVALID
   });
+  assert.equal(sessions.csrfTouches, 0);
   assert.equal((await service.requireCsrf(verified.cookie, verified.csrfToken)).userId, USER_ID);
+  assert.equal(sessions.csrfTouches, 1);
   await assert.rejects(service.verifyChallenge(challenge.id, challenge.nonce, signature), {
     code: ERROR_CODES.AUTH_REQUIRED
   });
