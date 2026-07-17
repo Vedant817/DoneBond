@@ -542,3 +542,71 @@ test("valid same-scope same-nonce replacement is audit-coupled", async () => {
     true
   );
 });
+
+test("project authorization returns explicit owner and member roles", async () => {
+  const ownerUserId = "00000000-0000-4000-8000-000000000010";
+  const memberUserId = "00000000-0000-4000-8000-000000000011";
+  const ownerAuthorization = {
+    projectId: ids.project,
+    projectPublicId: publicId,
+    ownerUserId,
+    userId: ownerUserId,
+    role: "owner"
+  };
+  const memberAuthorization = {
+    ...ownerAuthorization,
+    userId: memberUserId,
+    role: "member"
+  };
+  const database = createFakeDatabase({ selects: [[ownerAuthorization], [memberAuthorization]] });
+  const repository = new DoneBondRepository(database);
+  assert.deepEqual(await repository.findProjectAuthorization(publicId, ownerUserId), {
+    projectId: ids.project,
+    projectPublicId: publicId,
+    userId: ownerUserId,
+    role: "owner"
+  });
+  assert.deepEqual(await repository.findProjectAuthorization(publicId, memberUserId), {
+    projectId: ids.project,
+    projectPublicId: publicId,
+    userId: memberUserId,
+    role: "member"
+  });
+});
+
+test("project authorization makes nonmember, cross-project, and missing reads indistinguishable", async () => {
+  const actorUserId = "00000000-0000-4000-8000-000000000012";
+  const database = createFakeDatabase({ selects: [[], [], []] });
+  const repository = new DoneBondRepository(database);
+  assert.equal(await repository.findProjectAuthorization(publicId, actorUserId), null);
+  assert.equal(
+    await repository.findProjectAuthorization("01arz3ndektsv4rrffq69g5fax", actorUserId),
+    null
+  );
+  assert.equal(
+    await repository.findProjectAuthorization("01arz3ndektsv4rrffq69g5fay", actorUserId),
+    null
+  );
+  assert.equal(database.calls.filter((call) => call.kind === "select").length, 3);
+});
+
+test("project authorization fails closed on inconsistent owner membership", async () => {
+  const actorUserId = "00000000-0000-4000-8000-000000000012";
+  const database = createFakeDatabase({
+    selects: [
+      [
+        {
+          projectId: ids.project,
+          projectPublicId: publicId,
+          ownerUserId: "00000000-0000-4000-8000-000000000010",
+          userId: actorUserId,
+          role: "owner"
+        }
+      ]
+    ]
+  });
+  await assert.rejects(
+    new DoneBondRepository(database).findProjectAuthorization(publicId, actorUserId),
+    (error) => error instanceof DatabaseServiceError && error.code === "DB_CONFLICT"
+  );
+});

@@ -69,6 +69,13 @@ export interface EvidencePersistenceInput {
   readonly audit: AuditEventInsert;
 }
 
+export interface ProjectAuthorizationRecord {
+  readonly projectId: string;
+  readonly projectPublicId: string;
+  readonly userId: string;
+  readonly role: "owner" | "member";
+}
+
 function invalid(message: string): DatabaseServiceError {
   return new DatabaseServiceError("DB_INVALID_INPUT", message);
 }
@@ -714,6 +721,50 @@ export class DoneBondRepository {
       .where(eq(projects.publicId, publicId))
       .limit(1);
     return project?.project ?? null;
+  }
+
+  /**
+   * Resolves project authorization without a separate project-existence query.
+   * Missing projects and projects the actor cannot access both return null so a
+   * service can expose the same PROJECT_NOT_FOUND response for either case.
+   */
+  public async findProjectAuthorization(
+    publicId: string,
+    actorUserId: string
+  ): Promise<ProjectAuthorizationRecord | null> {
+    try {
+      const [authorization] = await this.database
+        .select({
+          projectId: projects.id,
+          projectPublicId: projects.publicId,
+          ownerUserId: projects.ownerUserId,
+          userId: projectMembers.userId,
+          role: projectMembers.role
+        })
+        .from(projects)
+        .innerJoin(
+          projectMembers,
+          and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, actorUserId))
+        )
+        .where(eq(projects.publicId, publicId))
+        .limit(1);
+      if (!authorization) return null;
+      const isProjectOwner = authorization.ownerUserId === authorization.userId;
+      if ((authorization.role === "owner") !== isProjectOwner) {
+        throw new DatabaseServiceError(
+          "DB_CONFLICT",
+          "Project owner and membership role are inconsistent"
+        );
+      }
+      return {
+        projectId: authorization.projectId,
+        projectPublicId: authorization.projectPublicId,
+        userId: authorization.userId,
+        role: authorization.role
+      };
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
   }
 
   private async assertIdempotentReplay(

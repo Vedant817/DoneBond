@@ -9,6 +9,7 @@ import postgres from "postgres";
 import {
   buildPostgresOptions,
   databaseSchema,
+  DoneBondRepository,
   DrizzleAuthRateLimiter,
   DrizzleBrowserSessionStore,
   DrizzleWalletAccountResolver,
@@ -82,6 +83,67 @@ test(
           'Integration', 'https://example.test/owner/repository', 'main'
         )
       `;
+      await client`
+        INSERT INTO project_members (project_id, user_id, role)
+        VALUES (${projectId}, ${userId}, 'owner')
+      `;
+      const memberUserId = "00000000-0000-4000-8000-000000000103";
+      const nonmemberUserId = "00000000-0000-4000-8000-000000000104";
+      const crossProjectUserId = "00000000-0000-4000-8000-000000000105";
+      const crossProjectId = "00000000-0000-4000-8000-000000000106";
+      const crossProjectPublicId = "01arz3ndektsv4rrffq69g5fax";
+      await client`
+        INSERT INTO users (id, display_name) VALUES
+          (${memberUserId}, 'Integration member'),
+          (${nonmemberUserId}, 'Integration nonmember'),
+          (${crossProjectUserId}, 'Cross-project member')
+      `;
+      await client`
+        INSERT INTO project_members (project_id, user_id, role)
+        VALUES (${projectId}, ${memberUserId}, 'member')
+      `;
+      await client`
+        INSERT INTO projects (
+          id, public_id, owner_user_id, slug, name, repository_url, default_branch
+        ) VALUES (
+          ${crossProjectId}, ${crossProjectPublicId}, ${crossProjectUserId}, 'cross-project',
+          'Cross project', 'https://example.test/owner/cross-project', 'main'
+        )
+      `;
+      await client`
+        INSERT INTO project_members (project_id, user_id, role)
+        VALUES (${crossProjectId}, ${crossProjectUserId}, 'owner')
+      `;
+
+      const repository = new DoneBondRepository(database);
+      const targetProjectPublicId = "01arz3ndektsv4rrffq69g5fav";
+      assert.deepEqual(await repository.findProjectAuthorization(targetProjectPublicId, userId), {
+        projectId,
+        projectPublicId: targetProjectPublicId,
+        userId,
+        role: "owner"
+      });
+      assert.equal(
+        (await repository.findProjectAuthorization(targetProjectPublicId, memberUserId))?.role,
+        "member"
+      );
+      assert.equal(
+        await repository.findProjectAuthorization(targetProjectPublicId, nonmemberUserId),
+        null
+      );
+      assert.equal(
+        await repository.findProjectAuthorization(targetProjectPublicId, crossProjectUserId),
+        null
+      );
+      assert.equal(
+        await repository.findProjectAuthorization("01arz3ndektsv4rrffq69g5fay", crossProjectUserId),
+        null
+      );
+      await client`DELETE FROM projects WHERE id = ${crossProjectId}`;
+      assert.equal(
+        await repository.findProjectAuthorization(crossProjectPublicId, crossProjectUserId),
+        null
+      );
       const invalidDigest = "test-only-invalid-digest";
       await assert.rejects(
         client`
