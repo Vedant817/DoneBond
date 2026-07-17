@@ -1,4 +1,9 @@
-import { createDatabase, createWalletAuthAdapters, DrizzleAuthRateLimiter } from "@donebond/db";
+import {
+  createDatabase,
+  createWalletAuthAdapters,
+  DoneBondRepository,
+  DrizzleAuthRateLimiter
+} from "@donebond/db";
 
 import { createAuthHandlers, type RequestRateLimiter } from "./auth-handlers.ts";
 import { correlationId, errorResponse } from "./http.ts";
@@ -6,6 +11,8 @@ import { WalletAuthService } from "./wallet-auth.ts";
 
 let handlers: ReturnType<typeof createAuthHandlers> | undefined;
 let databaseHandle: ReturnType<typeof createDatabase> | undefined;
+let walletAuthService: WalletAuthService | undefined;
+let projectRepository: DoneBondRepository | undefined;
 
 type AuthHandler = keyof ReturnType<typeof createAuthHandlers>;
 
@@ -57,6 +64,8 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
     accounts: adapters.accounts,
     sessions: adapters.sessions
   });
+  walletAuthService = auth;
+  projectRepository = new DoneBondRepository(databaseHandle.db);
   handlers = createAuthHandlers({
     applicationOrigin: canonicalOrigin,
     auth,
@@ -90,6 +99,17 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
     )
   });
   return handlers;
+}
+
+export function getProjectAuthorizationServices(): {
+  readonly authenticator: WalletAuthService;
+  readonly accessStore: DoneBondRepository;
+} {
+  getAuthHandlers();
+  if (walletAuthService === undefined || projectRepository === undefined) {
+    throw new TypeError("Project authorization services failed to initialize");
+  }
+  return { authenticator: walletAuthService, accessStore: projectRepository };
 }
 
 export async function dispatchAuthRequest(

@@ -69,10 +69,8 @@ export interface EvidencePersistenceInput {
   readonly audit: AuditEventInsert;
 }
 
-export interface ProjectAuthorizationRecord {
-  readonly projectId: string;
+export interface ProjectAccessRecord {
   readonly projectPublicId: string;
-  readonly userId: string;
   readonly role: "owner" | "member";
 }
 
@@ -728,14 +726,13 @@ export class DoneBondRepository {
    * Missing projects and projects the actor cannot access both return null so a
    * service can expose the same PROJECT_NOT_FOUND response for either case.
    */
-  public async findProjectAuthorization(
+  public async findProjectAccess(
     publicId: string,
     actorUserId: string
-  ): Promise<ProjectAuthorizationRecord | null> {
+  ): Promise<ProjectAccessRecord | null> {
     try {
       const [authorization] = await this.database
         .select({
-          projectId: projects.id,
           projectPublicId: projects.publicId,
           ownerUserId: projects.ownerUserId,
           userId: projectMembers.userId,
@@ -757,9 +754,7 @@ export class DoneBondRepository {
         );
       }
       return {
-        projectId: authorization.projectId,
         projectPublicId: authorization.projectPublicId,
-        userId: authorization.userId,
         role: authorization.role
       };
     } catch (error) {

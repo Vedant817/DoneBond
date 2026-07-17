@@ -560,16 +560,12 @@ test("project authorization returns explicit owner and member roles", async () =
   };
   const database = createFakeDatabase({ selects: [[ownerAuthorization], [memberAuthorization]] });
   const repository = new DoneBondRepository(database);
-  assert.deepEqual(await repository.findProjectAuthorization(publicId, ownerUserId), {
-    projectId: ids.project,
+  assert.deepEqual(await repository.findProjectAccess(publicId, ownerUserId), {
     projectPublicId: publicId,
-    userId: ownerUserId,
     role: "owner"
   });
-  assert.deepEqual(await repository.findProjectAuthorization(publicId, memberUserId), {
-    projectId: ids.project,
+  assert.deepEqual(await repository.findProjectAccess(publicId, memberUserId), {
     projectPublicId: publicId,
-    userId: memberUserId,
     role: "member"
   });
 });
@@ -578,15 +574,9 @@ test("project authorization makes nonmember, cross-project, and missing reads in
   const actorUserId = "00000000-0000-4000-8000-000000000012";
   const database = createFakeDatabase({ selects: [[], [], []] });
   const repository = new DoneBondRepository(database);
-  assert.equal(await repository.findProjectAuthorization(publicId, actorUserId), null);
-  assert.equal(
-    await repository.findProjectAuthorization("01arz3ndektsv4rrffq69g5fax", actorUserId),
-    null
-  );
-  assert.equal(
-    await repository.findProjectAuthorization("01arz3ndektsv4rrffq69g5fay", actorUserId),
-    null
-  );
+  assert.equal(await repository.findProjectAccess(publicId, actorUserId), null);
+  assert.equal(await repository.findProjectAccess("01arz3ndektsv4rrffq69g5fax", actorUserId), null);
+  assert.equal(await repository.findProjectAccess("01arz3ndektsv4rrffq69g5fay", actorUserId), null);
   assert.equal(database.calls.filter((call) => call.kind === "select").length, 3);
 });
 
@@ -606,7 +596,7 @@ test("project authorization fails closed on inconsistent owner membership", asyn
     ]
   });
   await assert.rejects(
-    new DoneBondRepository(database).findProjectAuthorization(publicId, actorUserId),
+    new DoneBondRepository(database).findProjectAccess(publicId, actorUserId),
     (error) => error instanceof DatabaseServiceError && error.code === "DB_CONFLICT"
   );
 });

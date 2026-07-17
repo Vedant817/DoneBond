@@ -233,8 +233,8 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 - [x] Implement secure browser authentication.
 - [x] Implement wallet ownership association/signature challenge if used.
-- [ ] Add project ownership/member checks.
-- [ ] Add authorization matrix tests.
+- [x] Add project ownership/member checks.
+- [x] Add authorization matrix tests.
 - [ ] Ensure public endpoints use a strict field allowlist.
 
 ## 4.3 CLI tokens
@@ -741,3 +741,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Nonces, session tokens, CSRF tokens, and rate-limit subjects persist only as digests. Wrong CSRF cannot extend idle lifetime. API responses omit user/session database UUIDs. PostgreSQL fixed-window upserts enforce limits across instances and opportunistically remove bounded expired batches. Every login issues fresh tokens; periodic active-session rotation remains an accepted documented MVP risk under 12-hour absolute/one-hour idle expiry.
 - Remaining risks/blockers: A disposable PostgreSQL service is still unavailable, so migrations and concurrency have not executed against a real server. Project/member authorization matrix and public field-allowlist coverage remain incomplete child items in 4.2. Runtime deployment configuration and live wallet-browser exercise remain later integration/deployment gates.
 - Commit: DB persistence `ee2d0b1`, CSRF hardening `96709d8`, durable rate limiting `1eb8f1f`, web integration `0a33b53985a6512b59a7ae47ac0e8b38e6d4b9dd`.
+
+## 2026-07-17 13:00 IST — Database engineer + Codex/integrator + independent security reviewer — 4.2 project authorization
+- Branch/worktree: DB read model on `feat/project-auth-read-model`, integrated and service-wired on `main`; independent read-only review.
+- Summary: Added a minimal project-access read model and server authorization boundary with explicit owner/member roles. A single joined query binds the authenticated user to the requested project, returns no private project fields, makes missing/nonmember/cross-project reads indistinguishable, and fails closed if the owner column and membership role disagree. The web boundary authenticates before lookup, enforces the persisted 26-character project ID, validates the required role at runtime, and rejects mismatched adapter results.
+- Files changed: `packages/db/src/repository.ts`, DB unit/guarded integration tests, `apps/web/src/server/project-authorization*`, auth runtime integration, manifest, and tracker.
+- Verification commands: DB build/typecheck/test; web test/typecheck; root lint/boundaries; `git diff --check`; independent role-confusion and existence-leakage review.
+- Results: DB passed 36/37 with the guarded real-PostgreSQL test skipped; web passed 21/21. Owner, member, member-as-owner denial, unauthenticated access, nonmember, cross-project, missing/deleted project, malformed ID, unknown runtime role, inconsistent ownership, and mismatched adapter results are covered. The reviewer’s unknown-role downgrade finding was reproduced, fixed, and re-tested.
+- Security/privacy notes: Unauthorized and nonexistent projects share `PROJECT_NOT_FOUND`; only an authenticated member can receive `AUTH_FORBIDDEN` when attempting an owner-only operation. The read model returns only public ID and role, never internal UUIDs or repository metadata.
+- Remaining risks/blockers: The public-endpoint allowlist child item remains open until the receipt API is implemented. Real PostgreSQL authorization and cascade behavior remain guarded by the unavailable disposable database.
+- Commit: DB read model `4a845aa`; web integration pending.

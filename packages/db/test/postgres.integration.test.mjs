@@ -117,31 +117,29 @@ test(
 
       const repository = new DoneBondRepository(database);
       const targetProjectPublicId = "01arz3ndektsv4rrffq69g5fav";
-      assert.deepEqual(await repository.findProjectAuthorization(targetProjectPublicId, userId), {
-        projectId,
+      assert.deepEqual(await repository.findProjectAccess(targetProjectPublicId, userId), {
         projectPublicId: targetProjectPublicId,
-        userId,
         role: "owner"
       });
       assert.equal(
-        (await repository.findProjectAuthorization(targetProjectPublicId, memberUserId))?.role,
+        (await repository.findProjectAccess(targetProjectPublicId, memberUserId))?.role,
         "member"
       );
       assert.equal(
-        await repository.findProjectAuthorization(targetProjectPublicId, nonmemberUserId),
+        await repository.findProjectAccess(targetProjectPublicId, nonmemberUserId),
         null
       );
       assert.equal(
-        await repository.findProjectAuthorization(targetProjectPublicId, crossProjectUserId),
+        await repository.findProjectAccess(targetProjectPublicId, crossProjectUserId),
         null
       );
       assert.equal(
-        await repository.findProjectAuthorization("01arz3ndektsv4rrffq69g5fay", crossProjectUserId),
+        await repository.findProjectAccess("01arz3ndektsv4rrffq69g5fay", crossProjectUserId),
         null
       );
       await client`DELETE FROM projects WHERE id = ${crossProjectId}`;
       assert.equal(
-        await repository.findProjectAuthorization(crossProjectPublicId, crossProjectUserId),
+        await repository.findProjectAccess(crossProjectPublicId, crossProjectUserId),
         null
       );
       const invalidDigest = "test-only-invalid-digest";
