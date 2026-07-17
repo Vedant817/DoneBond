@@ -104,7 +104,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 2.1 Policy schema
 
-- [ ] Implement YAML policy parser using a strict schema.
+- [-] Implement YAML policy parser using a strict schema. (Evidence engineer, `feat/evidence-engine`.)
 - [ ] Define executable, args, cwd, timeout, required flag, output limits, environment allowlist, and redaction patterns.
 - [ ] Reject unknown fields unless intentionally allowed by a versioned extension mechanism.
 - [ ] Reject paths outside repository root.
@@ -223,7 +223,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 4.1 Database foundation
 
-- [ ] Implement Drizzle schema and migrations for all MVP entities.
+- [-] Implement Drizzle schema and migrations for all MVP entities. (Database engineer, `feat/database-foundation`.)
 - [ ] Add constraints and indexes for public IDs, chain logs, idempotency, and normalized wallets.
 - [ ] Add typed repository/service layer.
 - [ ] Add local database development setup.
@@ -295,7 +295,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 5.1 CLI skeleton
 
-- [ ] Package executable as `donebond`.
+- [-] Package executable as `donebond`. (CLI engineer, `feat/cli-foundation`.)
 - [ ] Add version/help/error conventions.
 - [ ] Add structured nonzero exit codes.
 - [ ] Ensure secrets never appear in debug logs.
@@ -670,4 +670,4 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Results: Official primary sources report chain ID `10143`, RPC `https://rpc.testnet.monad.xyz`, explorer `https://testnet.monadscan.com`, and native `MON`. Committed ABI exactly matches pinned Solidity output and the fixed vector passes. Shell preflight could not resolve external DNS in this execution environment, so no transaction or live RPC result is claimed.
 - Security/privacy notes: No deployer/verifier key, wallet address, or credential was added. Explorer API credentials remain blank.
 - Remaining risks/blockers: Deployment, source verification, and live create/submit/approve/withdraw require a dedicated funded Testnet wallet, verifier key/address, working outbound RPC DNS, and explorer verification access.
-- Commit: network configuration `e526f713ed02c73a3abc86e6415874bbffa62209`; ABI versioning pending in this changeset.
+- Commit: network configuration `e526f713ed02c73a3abc86e6415874bbffa62209`; ABI versioning `c4f86d04d1fa93c73408603f23c03e34fb8aca6f` with formatting correction `5ce6d3ffe64adf33a4c62643d831980264abad06`.
