@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "test:contracts": "node --test test/scaffold.test.mjs"
+    "build": "forge build",
+    "format:check": "forge fmt --check",
+    "test": "node --test test/scaffold.test.mjs && forge test",
+    "test:contracts": "forge test"
   }
 }
