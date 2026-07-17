@@ -51,6 +51,46 @@ contract DoneBondRegistryTest is Test {
         new DoneBondRegistry(address(0));
     }
 
+    function testConstructorRejectsContractVerifier() public {
+        vm.expectRevert(DoneBondRegistry.InvalidVerifier.selector);
+        new DoneBondRegistry(address(this));
+    }
+
+    function testSharedEip712FixedVector() public {
+        vm.chainId(10_143);
+        address targetAddress = 0x1212121212121212121212121212121212121212;
+        vm.etch(targetAddress, address(registry).code);
+        DoneBondRegistry target = DoneBondRegistry(targetAddress);
+        address vectorAssignee = 0x3434343434343434343434343434343434343434;
+
+        target.createTask(keccak256("unused task"), keccak256("unused policy"), vectorAssignee, 0);
+        uint256 taskId = target.createTask(
+            bytes32(uint256(0x1111111111111111111111111111111111111111111111111111111111111111)),
+            bytes32(uint256(0x2222222222222222222222222222222222222222222222222222222222222222)),
+            vectorAssignee,
+            0
+        );
+
+        assertEq(taskId, 1);
+        assertEq(
+            target.PASSING_RECEIPT_TYPEHASH(),
+            0x59d552f1cf676b302e799cde1beeb4544365adc2c515c19ced9e43da442e29ff
+        );
+        assertEq(
+            target.receiptAttestationDigest(
+                taskId,
+                bytes32(
+                    uint256(0x4444444444444444444444444444444444444444444444444444444444444444)
+                ),
+                bytes32(
+                        uint256(0x5555555555555555555555555555555555555555555555555555555555555555)
+                    ),
+                1_784_246_400
+            ),
+            0xc3195344fe8ff265b688cbfc6dadcf403a0de25d776fe9e56d38be4496d56a59
+        );
+    }
+
     function testCreateTaskStoresPackedCommitmentsAndEmits() public {
         uint64 deadline = uint64(block.timestamp + 1 days);
         vm.expectEmit(true, true, true, true, address(registry));

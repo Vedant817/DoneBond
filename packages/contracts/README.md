@@ -33,6 +33,11 @@ The registry intentionally uses `block.timestamp` only for user-selected task de
 verifier attestations. Validators can skew timestamps slightly, so callers should not use deadlines whose
 correctness depends on second-level precision. Exact equality is valid; expiry begins one second later.
 
+The immutable verifier must be a dedicated ECDSA EOA, not a contract wallet. Deployment rejects addresses
+that already contain code, and the release smoke test must prove one signed receipt before publishing the
+address. The MVP has no review timeout after a receipt is submitted: if the creator loses access or refuses
+to decide, the reward remains locked. A future dispute/review-deadline version must address this explicitly.
+
 ## Deploy
 
 Never place the deployer key in a file. Export it only in the deployment shell, then run:

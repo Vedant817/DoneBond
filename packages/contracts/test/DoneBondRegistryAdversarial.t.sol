@@ -61,6 +61,14 @@ contract RevertingCreator {
     }
 }
 
+contract ForceSender {
+    constructor() payable { }
+
+    function force(address payable target) external {
+        selfdestruct(target);
+    }
+}
+
 contract DoneBondRegistryAdversarialTest is Test {
     uint256 internal constant VERIFIER_KEY = 0xA11CE;
     bytes32 internal constant TASK_HASH = keccak256("task");
@@ -109,6 +117,19 @@ contract DoneBondRegistryAdversarialTest is Test {
         assertEq(registry.withdrawable(address(receiver)), 2 ether);
         assertEq(registry.totalWithdrawable(), 2 ether);
         assertEq(address(registry).balance, 2 ether);
+    }
+
+    function testForcedNativeCurrencyCreatesOnlyHarmlessSurplus() public {
+        vm.prank(creator);
+        registry.createTask{ value: 2 ether }(TASK_HASH, POLICY_HASH, creator, 0);
+        ForceSender sender = new ForceSender{ value: 1 ether }();
+        sender.force(payable(address(registry)));
+
+        assertEq(address(registry).balance, 3 ether);
+        assertEq(registry.totalLockedRewards() + registry.totalWithdrawable(), 2 ether);
+        assertGe(
+            address(registry).balance, registry.totalLockedRewards() + registry.totalWithdrawable()
+        );
     }
 
     function _signature(uint256 taskId, bytes32 evidenceHash, bytes32 commitHash, uint64 expiry)

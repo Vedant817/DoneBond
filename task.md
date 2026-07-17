@@ -169,40 +169,40 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 3.1 Foundry setup
 
-- [ ] Initialize Foundry project in `packages/contracts`.
-- [ ] Pin compiler and dependency versions.
-- [ ] Configure formatter, optimizer, RPC environment, and coverage.
-- [ ] Add deployment and verification scripts.
+- [x] Initialize Foundry project in `packages/contracts`.
+- [x] Pin compiler and dependency versions.
+- [x] Configure formatter, optimizer, RPC environment, and coverage.
+- [x] Add deployment and verification scripts.
 
 ## 3.2 Implement `DoneBondRegistry`
 
-- [ ] Implement compact task storage and explicit status enum.
-- [ ] Implement `createTask` with task/policy commitments and optional reward.
-- [ ] Implement assignee-only receipt submission.
-- [ ] Implement creator-only approval/rejection/cancellation.
-- [ ] Implement expiry semantics.
-- [ ] Implement pull-payment credits and reentrancy-safe withdrawal.
-- [ ] Add custom errors and complete events.
-- [ ] Prevent duplicate or terminal-state transitions.
-- [ ] Document every public/external function with NatSpec.
+- [x] Implement compact task storage and explicit status enum.
+- [x] Implement `createTask` with task/policy commitments and optional reward.
+- [x] Implement assignee-only receipt submission.
+- [x] Implement creator-only approval/rejection/cancellation.
+- [x] Implement expiry semantics.
+- [x] Implement pull-payment credits and reentrancy-safe withdrawal.
+- [x] Add custom errors and complete events.
+- [x] Prevent duplicate or terminal-state transitions.
+- [x] Document every public/external function with NatSpec.
 
 ## 3.3 Contract testing
 
-- [ ] Unit-test every successful transition.
-- [ ] Unit-test every access-control and invalid-state revert.
-- [ ] Test deadline boundaries.
-- [ ] Test large reward cast/overflow handling.
-- [ ] Test malicious and reverting withdrawal receivers.
-- [ ] Add fuzz tests for actors, values, times, and hashes.
-- [ ] Add invariant handler for solvency and single-credit guarantees.
-- [ ] Generate gas report and review unexpected costs.
+- [x] Unit-test every successful transition.
+- [x] Unit-test every access-control and invalid-state revert.
+- [x] Test deadline boundaries.
+- [x] Test large reward cast/overflow handling.
+- [x] Test malicious and reverting withdrawal receivers.
+- [x] Add fuzz tests for actors, values, times, and hashes.
+- [x] Add invariant handler for solvency and single-credit guarantees.
+- [x] Generate gas report and review unexpected costs.
 
 ## 3.4 Independent contract audit
 
-- [ ] Contract-auditor subagent reviews specification before implementation merge.
-- [ ] Auditor independently derives state machine and accounting invariants.
-- [ ] Run static analysis where reproducible.
-- [ ] Resolve all critical/high findings and document accepted lower-risk findings.
+- [x] Contract-auditor subagent reviews specification before implementation merge.
+- [x] Auditor independently derives state machine and accounting invariants.
+- [x] Run static analysis where reproducible.
+- [x] Resolve all critical/high findings and document accepted lower-risk findings.
 
 **Verification:** implementer does not self-approve this milestone.
 
@@ -642,7 +642,7 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Remaining risks/blockers: Canonical hashing execution and frozen evidence vectors are task 2.5. EIP-712 verifier availability/key rotation remains an explicit MVP operational dependency. Remote publication remains blocked by missing personal GitHub SSH authorization.
 - Commit: `1ffd64b2a0e518f36f871619357fdcf5c0ee08c5`
 
-## 2026-07-17 10:31 IST — CI engineer + Codex/integrator — 1.2
+## 2026-07-17 10:24 IST — CI engineer + Codex/integrator — 1.2
 - Branch/worktree: `feat/ci` in `/Users/salescode/Documents/Code/DoneBond-ci`, integrated to `main`.
 - Summary: Added least-privilege CI with frozen installs, SHA-pinned actions, safe pnpm caching, isolated quality/contract/security jobs, deterministic optional e2e, a redaction-safe tracked-history secret scanner, production dependency audit, and local security command aliases. Root JavaScript gates intentionally exclude Foundry and run the contract suite through its dedicated pinned toolchain job.
 - Files changed: `.github/workflows/ci.yml`, `scripts/scan-secrets.mjs`, `scripts/ci/scan-secrets.test.mjs`, root scripts, manifest, and tracker.
@@ -650,4 +650,14 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Results: Local quality suite passed; contract suite passed 28/28; Playwright passed 1/1; scanner passed 4/4 and scanned 148 tracked/history files without exposing match values; actionlint passed; intentional broken test failed as required; audit passed the critical threshold with one known moderate PostCSS advisory.
 - Security/privacy notes: Workflow permissions are read-only, checkout credentials are not persisted, production secrets are not referenced for pull requests, and action revisions/tool versions are pinned.
 - Remaining risks/blockers: A hosted GitHub Actions run cannot be observed until the external `Vedant817/donebond` repository and personal SSH authentication are available; local workflow validation is complete.
-- Commit: `75154c36d7c143607988fa45c9f2a7db50e5c913`; root-script integration pending in this changeset.
+- Commit: `75154c36d7c143607988fa45c9f2a7db50e5c913`; root-script integration `1d4b33afee93902038dfb1dcf5cfb9c9c283c7bf`.
+
+## 2026-07-17 10:32 IST — Contract engineer + independent contract auditor + Codex/integrator — 3.1–3.4
+- Branch/worktree: `feat/contracts` in `/Users/salescode/Documents/Code/DoneBond-contracts`, integrated and hardened on `main`; independent read-only audit from `review/foundations`.
+- Summary: Implemented the immutable `DoneBondRegistry` with EIP-712 passing-evidence attestations, explicit terminal lifecycle, optional native MON escrow, creator/assignee authorization, expiry, terminal rejection refunds, pull-payment settlement, replay protection, complete events/errors/NatSpec, pinned vendored dependencies, deployment tooling, and adversarial/fuzz/invariant coverage. Post-audit hardening added an EOA-verifier deployment guard, independent cross-language digest vector, forced-MON surplus case, and non-degenerate stateful exploration.
+- Files changed: `packages/contracts/**`, `.env.example`, `SECURITY.md`, manifest, and tracker.
+- Verification commands: `forge fmt --check`; `forge build`; `forge test -vvv`; `forge test --gas-report`; `forge coverage --report summary`; `forge lint`; `forge build --sizes`; `pnpm test:contracts`; independent source/spec audit; post-fix targeted re-audit.
+- Results: 32/32 tests passed: 25 unit/fuzz, 3 adversarial, 4 invariants. Fuzz tests ran 512 cases each. Every invariant ran 256 runs/16,384 calls with zero handler reverts and thousands of successful create/submit/approve/reject/cancel/expire/withdraw actions. Registry coverage is 100% lines/functions, 99.15% statements, 96% branches. Shared/Solidity EIP-712 digest `0xc319…` matches. Auditor reports no remaining critical/high findings.
+- Security/privacy notes: Attestations bind chain, contract, task/policy/assignee/evidence/commit/expiry and cannot replay; checks-effects-interactions, reentrancy guard, reward zeroing, aggregate accounting, and pull payments prevent duplicate settlement. Forced funds produce harmless surplus under `balance >= liabilities`. No deployment secrets were persisted.
+- Remaining risks/blockers: Receipt-submitted rewards have no unilateral review timeout; ECDSA EOA verifier rotation requires a new deployment; validator timestamp skew requires practical buffers. These accepted MVP risks are documented. Slither/Aderyn/Solhint/Mythril/Semgrep were unavailable; Foundry lint produced only documented timestamp warnings. Monad Testnet deployment and live settlement remain task 3.5 and require an externally funded wallet/RPC.
+- Commit: implementation `708a9410bc174e668317ed4852a3c89603a43ea8`; audit hardening pending in this changeset.

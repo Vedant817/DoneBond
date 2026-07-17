@@ -101,7 +101,7 @@ contract DoneBondRegistry is ReentrancyGuard, EIP712 {
 
     /// @param verifier_ Nonzero signer authorized to issue passing verification attestations.
     constructor(address verifier_) EIP712("DoneBondRegistry", "1") {
-        if (verifier_ == address(0)) revert InvalidVerifier();
+        if (verifier_ == address(0) || verifier_.code.length != 0) revert InvalidVerifier();
         verifier = verifier_;
     }
 

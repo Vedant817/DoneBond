@@ -13,6 +13,7 @@ contract RegistryHandler is Test {
 
     DoneBondRegistry public immutable registry;
     address[] internal actors;
+    uint256 public successfulCreates;
 
     constructor(DoneBondRegistry registry_) {
         registry = registry_;
@@ -30,21 +31,23 @@ contract RegistryHandler is Test {
         address assignee = actors[assigneeSeed % actors.length];
         reward = uint96(uint256(reward) % (100 ether + 1));
         vm.deal(creator, creator.balance + reward);
-        uint64 deadline =
-            ttl % 2 == 0 ? 0 : uint64(block.timestamp + bound(ttl, 1, type(uint32).max));
+        uint64 deadline = ttl % 2 == 0 ? 0 : uint64(block.timestamp + bound(ttl, 1, 30 days));
+        uint256 nextTaskId = registry.nextTaskId();
+        bytes32 taskHash = keccak256(abi.encode("task", nextTaskId));
+        bytes32 policyHash = keccak256(abi.encode("policy", nextTaskId));
         vm.prank(creator);
-        registry.createTask{ value: reward }(
-            keccak256(abi.encode("task", registry.nextTaskId())),
-            keccak256(abi.encode("policy", registry.nextTaskId())),
-            assignee,
-            deadline
-        );
+        registry.createTask{ value: reward }(taskHash, policyHash, assignee, deadline);
+        successfulCreates++;
     }
 
     function submit(uint256 seed, uint32 ttl) external {
         uint256 taskId = _taskId(seed);
-        (,, DoneBondRegistry.TaskStatus status, address assignee,,,,,) = registry.tasks(taskId);
-        if (status != DoneBondRegistry.TaskStatus.Open) return;
+        (, uint64 deadline, DoneBondRegistry.TaskStatus status, address assignee,,,,,) =
+            registry.tasks(taskId);
+        if (
+            status != DoneBondRegistry.TaskStatus.Open
+                || (deadline != 0 && block.timestamp > deadline)
+        ) return;
         uint64 expiry = uint64(block.timestamp + bound(ttl, 0, type(uint32).max));
         bytes32 digest =
             registry.receiptAttestationDigest(taskId, EVIDENCE_HASH, COMMIT_HASH, expiry);
@@ -83,7 +86,7 @@ contract RegistryHandler is Test {
         uint256 taskId = _taskId(seed);
         (, uint64 deadline, DoneBondRegistry.TaskStatus status,,,,,,) = registry.tasks(taskId);
         if (status != DoneBondRegistry.TaskStatus.Open || deadline == 0) return;
-        vm.warp(uint256(deadline) + bound(jump, 1, type(uint32).max));
+        vm.warp(uint256(deadline) + bound(jump, 1, 30 days));
         registry.expireTask(taskId);
     }
 
@@ -116,13 +119,19 @@ contract DoneBondRegistryInvariantTest is StdInvariant, Test {
     function setUp() public {
         registry = new DoneBondRegistry(vm.addr(0xA11CE));
         handler = new RegistryHandler(registry);
+        handler.create(0, 1, 1 ether, 0);
         targetContract(address(handler));
     }
 
-    function invariantContractIsExactlySolvent() public view {
-        assertEq(
+    function invariantContractIsSolvent() public view {
+        assertGe(
             address(registry).balance, registry.totalLockedRewards() + registry.totalWithdrawable()
         );
+    }
+
+    function invariantHandlerContinuesCreatingTasks() public view {
+        assertGt(handler.successfulCreates(), 0);
+        assertEq(registry.nextTaskId(), handler.successfulCreates() + 1);
     }
 
     function invariantAggregateAccountingMatchesEveryTaskAndActor() public view {

@@ -92,6 +92,18 @@ Apply redaction before persistence and hashing of the public/safe bundle.
 - Fuzz and invariant tests for solvency and single-credit behavior.
 - Separate deployer wallet with minimal funds.
 
+Accepted MVP contract risks:
+
+- A receipt-submitted reward has no unilateral timeout because only the creator can
+  approve or reject. Lost creator access or refusal can leave funds locked; the UI
+  must warn both parties, and a future contract version should add a review deadline
+  or dispute path.
+- The immutable verifier supports ECDSA EOAs only, not ERC-1271 contract wallets.
+  Deployment rejects addresses that already contain code and must complete a signed
+  receipt smoke test before the address is published.
+- Validators can influence timestamps slightly. Deadlines and attestations therefore
+  must use practical buffers rather than second-level-sensitive windows.
+
 ## Frontend/wallet security
 
 - Display chain ID, contract address, method, and amount before transaction.

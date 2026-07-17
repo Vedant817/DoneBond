@@ -31,7 +31,7 @@ quote_style = "double"
 number_underscore = "thousands"
 
 [rpc_endpoints]
-monad_testnet = "${MONAD_TESTNET_RPC_URL}"
+monad_testnet = "${MONAD_RPC_URL}"
 
 [etherscan]
 monad_testnet = { key = "${MONAD_EXPLORER_API_KEY}", url = "${MONAD_EXPLORER_API_URL}" }
