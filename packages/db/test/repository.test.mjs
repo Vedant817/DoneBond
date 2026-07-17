@@ -387,6 +387,37 @@ test("invalid chain state transition fails before querying", async () => {
   assert.equal(database.transactions, 0);
 });
 
+test("chain registration cannot bypass replacement validation", async () => {
+  const database = createFakeDatabase();
+  await assert.rejects(
+    new DoneBondRepository(database).registerChainTransaction(
+      {
+        publicId,
+        userId: "00000000-0000-4000-8000-000000000010",
+        projectId: ids.project,
+        taskId: ids.task,
+        intentType: "submit_receipt",
+        idempotencyKey: "test-only-chain-registration-key",
+        requestHash: hash,
+        chainId: 10_143,
+        fromAddress: `0x${"1".repeat(40)}`,
+        toAddress: `0x${"2".repeat(40)}`,
+        status: "replaced",
+        replacedByTransactionId: "00000000-0000-4000-8000-000000000021"
+      },
+      {
+        actorUserId: "00000000-0000-4000-8000-000000000010",
+        projectId: ids.project,
+        taskId: ids.task,
+        action: "chain.transaction_registered",
+        metadataSafeJson: {}
+      }
+    ),
+    /not an initial state/
+  );
+  assert.equal(database.transactions, 0);
+});
+
 test("chain state transition locks expected state and writes its audit atomically", async () => {
   const existing = {
     id: "00000000-0000-4000-8000-000000000020",

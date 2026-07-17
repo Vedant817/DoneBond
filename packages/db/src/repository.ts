@@ -149,6 +149,12 @@ const allowedChainTransitions: Readonly<
   reverted: []
 };
 
+const initialChainTransactionStatuses = new Set<ChainTransactionStatus>([
+  "prepared",
+  "wallet_requested",
+  "submitted"
+]);
+
 export class DoneBondRepository {
   public constructor(private readonly database: Database) {}
 
@@ -451,6 +457,13 @@ export class DoneBondRepository {
   }
 
   public async registerChainTransaction(input: ChainTransactionInsert, audit: AuditEventInsert) {
+    const initialStatus = input.status ?? "prepared";
+    if (!initialChainTransactionStatuses.has(initialStatus)) {
+      throw invalid("Chain transaction registration status is not an initial state");
+    }
+    if (input.replacedByTransactionId !== undefined && input.replacedByTransactionId !== null) {
+      throw invalid("A new chain transaction cannot predeclare a replacement");
+    }
     assertAuditScope(audit, input.projectId, input.taskId ?? null, input.userId);
     try {
       return await this.database.transaction(async (transaction) => {
