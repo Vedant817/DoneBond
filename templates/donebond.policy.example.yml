@@ -14,6 +14,7 @@ checks:
     timeoutSeconds: 120
     required: true
     maxOutputBytes: 32768
+    environmentAllowlist: []
 
   - key: lint
     label: Lint
@@ -23,6 +24,7 @@ checks:
     timeoutSeconds: 180
     required: true
     maxOutputBytes: 65536
+    environmentAllowlist: []
 
   - key: typecheck
     label: Type checking
@@ -32,6 +34,7 @@ checks:
     timeoutSeconds: 240
     required: true
     maxOutputBytes: 65536
+    environmentAllowlist: []
 
   - key: tests
     label: Unit and integration tests
@@ -41,6 +44,7 @@ checks:
     timeoutSeconds: 600
     required: true
     maxOutputBytes: 131072
+    environmentAllowlist: []
 
   - key: contracts
     label: Smart contract tests
@@ -50,6 +54,7 @@ checks:
     timeoutSeconds: 600
     required: true
     maxOutputBytes: 131072
+    environmentAllowlist: []
 
   - key: build
     label: Production build
@@ -59,6 +64,7 @@ checks:
     timeoutSeconds: 900
     required: true
     maxOutputBytes: 131072
+    environmentAllowlist: []
 
   - key: e2e
     label: End-to-end tests
@@ -68,6 +74,7 @@ checks:
     timeoutSeconds: 900
     required: false
     maxOutputBytes: 131072
+    environmentAllowlist: []
 
 environment:
   allow:

@@ -47,6 +47,8 @@ struct Task {
 
 mapping(uint256 => Task) public tasks;
 mapping(address => uint256) public withdrawable;
+
+address public immutable verifier;
 ```
 
 Review storage packing rather than assuming this exact order is optimal. Use a reward type that safely supports the intended range and validate casting.
@@ -78,7 +80,9 @@ Requirements:
 function submitReceipt(
     uint256 taskId,
     bytes32 evidenceHash,
-    bytes32 commitHash
+    bytes32 commitHash,
+    uint64 attestationExpiry,
+    bytes calldata verifierSignature
 ) external;
 ```
 
@@ -88,10 +92,19 @@ Requirements:
 - caller equals assignee;
 - deadline has not passed;
 - hashes are nonzero;
+- an EIP-712 verifier attestation is unexpired and signed by the immutable verifier;
+- the attestation binds the EIP-712 chain/contract domain plus task ID, task hash,
+  policy hash, assignee, evidence hash, commit hash, and expiry;
+- domain name is `DoneBondRegistry`, version is `1`, primary type is
+  `PassingReceipt`, and its exact Solidity type string/type hash are frozen in
+  ADR-004 and shared fixed-vector tests;
 - receipt can be submitted only once in the MVP;
 - changes state before emitting.
 
-The contract cannot prove tests passed. It proves which evidence commitment the assignee submitted. The offchain verifier and creator review establish the meaning of the bundle.
+The contract does not execute tests. The verifier signature proves that the
+configured DoneBond verifier validated a passing offchain bundle for the exact
+bound fields. Creator review remains an explicit separate acceptance step. See
+`docs/adr/ADR-004-verifier-attested-receipts.md`.
 
 ### `approveTask`
 
@@ -119,7 +132,9 @@ For the MVP, decide one of two explicit semantics:
 1. rejection is terminal and creator can reclaim reward; or
 2. rejection allows resubmission through a new task/version.
 
-Prefer terminal rejection plus a new task version because it keeps the state machine simple and auditable.
+Rejection is terminal. The task reward is zeroed and credited exactly once to the
+creator's withdrawable balance. A new attempt requires a new task version. A zero
+reason hash is invalid so the event always binds an explicit offchain reason.
 
 ### `cancelTask`
 
@@ -185,6 +200,10 @@ Use custom errors for gas efficiency and clarity:
 - `NothingToWithdraw()`
 - `TransferFailed()`
 - `ValueTooLarge()`
+- `InvalidVerifier()`
+- `InvalidAttestation()`
+- `AttestationAlreadyUsed()`
+- `AttestationExpired()`
 
 ## State transitions
 
@@ -206,6 +225,7 @@ No transition leaves a terminal state.
 - Contract balance is always at least total withdrawable credits plus rewards still locked in active tasks.
 - A withdrawal cannot transfer more than the caller’s credit.
 - Only the configured assignee can submit a receipt.
+- A receipt requires an unexpired passing attestation from the configured verifier.
 - Only the creator can approve, reject, or cancel.
 - Hash commitments are immutable after their corresponding transition.
 - Every value-moving state transition emits an event.

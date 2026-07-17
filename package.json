@@ -17,7 +17,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . && pnpm boundaries",
-    "test": "node --test scripts/check-workspace-boundaries.test.mjs",
+    "test": "node --test scripts/check-workspace-boundaries.test.mjs && turbo run test",
     "test:contracts": "turbo run test:contracts --filter=@donebond/contracts",
     "test:e2e": "turbo run test:e2e --filter=@donebond/e2e",
     "typecheck": "turbo run typecheck",

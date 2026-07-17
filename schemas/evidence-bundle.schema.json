@@ -11,7 +11,8 @@
     "git",
     "checks",
     "result",
-    "tool"
+    "tool",
+    "redactions"
   ],
   "properties": {
     "schemaVersion": { "const": 1 },
@@ -42,32 +43,48 @@
         "treeId",
         "branch",
         "remote",
-        "clean"
+        "clean",
+        "changedFiles"
       ],
       "properties": {
-        "objectId": { "type": "string", "pattern": "^[0-9a-fA-F]{40,64}$" },
+        "objectId": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
         "derivedCommitHash": { "$ref": "#/$defs/bytes32" },
-        "treeId": { "type": "string", "pattern": "^[0-9a-fA-F]{40,64}$" },
+        "treeId": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
         "branch": { "type": "string", "minLength": 1, "maxLength": 255 },
-        "remote": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "remote": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^github\\.com/[a-z0-9_.-]+/[a-z0-9_.-]+$"
+        },
         "clean": { "type": "boolean" },
         "changedFiles": {
           "type": "array",
           "maxItems": 5000,
           "items": { "type": "string", "maxLength": 1024 }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "clean": { "const": true } } },
+          "then": { "properties": { "changedFiles": { "maxItems": 0 } } }
+        }
+      ]
     },
     "checks": {
       "type": "array",
       "minItems": 1,
       "maxItems": 100,
+      "contains": {
+        "type": "object",
+        "required": ["required"],
+        "properties": { "required": { "const": true } }
+      },
       "items": { "$ref": "#/$defs/check" }
     },
     "result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["passing", "requiredPassed", "requiredTotal"],
+      "required": ["passing", "requiredPassed", "requiredTotal", "failureCodes"],
       "properties": {
         "passing": { "type": "boolean" },
         "requiredPassed": { "type": "integer", "minimum": 0 },
@@ -77,7 +94,14 @@
           "uniqueItems": true,
           "items": { "type": "string", "maxLength": 128 }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "passing": { "const": true } } },
+          "then": { "properties": { "failureCodes": { "maxItems": 0 } } },
+          "else": { "properties": { "failureCodes": { "minItems": 1 } } }
+        }
+      ]
     },
     "tool": {
       "type": "object",
@@ -98,11 +122,11 @@
   "$defs": {
     "bytes32": {
       "type": "string",
-      "pattern": "^0x[0-9a-fA-F]{64}$"
+      "pattern": "^0x[0-9a-f]{64}$"
     },
     "digest": {
       "type": "string",
-      "pattern": "^0x[0-9a-fA-F]{64}$"
+      "pattern": "^0x[0-9a-f]{64}$"
     },
     "check": {
       "type": "object",
@@ -131,7 +155,19 @@
         "signal": { "type": ["string", "null"], "maxLength": 32 },
         "stdout": { "$ref": "#/$defs/output" },
         "stderr": { "$ref": "#/$defs/output" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "passed" } } },
+          "then": {
+            "properties": { "exitCode": { "const": 0 }, "signal": { "type": "null" } }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "enum": ["timed_out", "error", "skipped"] } } },
+          "then": { "properties": { "exitCode": { "type": "null" } } }
+        }
+      ]
     },
     "output": {
       "type": "object",

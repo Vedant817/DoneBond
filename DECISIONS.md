@@ -9,3 +9,5 @@ Use this file for concise project-level decisions. Use a full ADR under `docs/ad
 | Initial | Put commitments and funds onchain, not source/logs | Preserves privacy and controls cost while retaining neutral integrity | Public proof combines offchain bundle and onchain event |
 | Initial | Use optional native MON pull payments | Keeps settlement understandable and avoids unnecessary token complexity | Contributor performs a separate withdrawal transaction |
 | Initial | Use a fresh repository under personal account | Hackathon eligibility and correct account separation | Git identity checker is a release gate |
+| 2026-07-17 | Require replay-safe EIP-712 verifier attestations for receipt submission | Prevent arbitrary or failing evidence from entering the successful onchain settlement path | Backend verifier signing and key protection are release-critical; see ADR-004 |
+| 2026-07-17 | Use strict versioned payloads with RFC 8785 canonical JSON | Ensure CLI, API, and third-party verifiers reproduce identical commitments | Unsafe integers are decimal strings and canonical fixtures are an integration gate; see ADR-005 |

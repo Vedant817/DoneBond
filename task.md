@@ -89,10 +89,10 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 1.3 Shared domain model
 
-- [ ] Define project, task, policy, check result, evidence bundle, chain transaction, and receipt types.
-- [ ] Define stable error codes.
-- [ ] Define supported chain configuration from environment variables.
-- [ ] Add unit tests for address and identifier normalization.
+- [x] Define project, task, policy, check result, evidence bundle, chain transaction, and receipt types.
+- [x] Define stable error codes.
+- [x] Define supported chain configuration from environment variables.
+- [x] Add unit tests for address and identifier normalization.
 
 **Parallelization:** shared-domain agent may work independently, but dependent package agents wait for the integration checkpoint.
 
@@ -631,3 +631,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: No secrets or runtime credentials were added. Next.js 16.2.10 and React 19.2.7 were selected from the current package registry; unsupported ESLint 10 was replaced with compatible ESLint 9.39.5 rather than suppressing rules. Workspace/output tracing is pinned to the repository root, and generated build/test state is ignored.
 - Remaining risks/blockers: Contract test command currently verifies only the scaffold/spec binding because Foundry implementation is Milestone 3. Real browser rendering/a11y tests and product UI are later milestones. Remote repository creation/SSH authentication remains blocked under 0.1, so commits are not pushed.
 - Commit: `2f64b580bd8d7f90230518c362ef4ee1dbcecba7` with generated-artifact correction `8c276b88a0a9b363461122267db168487d0b2e4c`
+
+## 2026-07-17 10:21 IST — Codex/primary coordinator + independent reviewer — 1.3
+- Branch/worktree: `main` in `/Users/salescode/Documents/Code/DoneBond`; read-only review in `review/foundations`.
+- Summary: Froze strict version-1 project/task/policy/evidence/transaction/receipt schemas, canonical GitHub/EVM/Git identifiers, stable API errors, environment-derived Monad configuration, RFC 8785 commitment rules, and a replay-safe EIP-712 verifier boundary. Structural receipts cannot self-claim verified integrity; trusted parsing requires the immutable verifier from deployment state and recovers its signature.
+- Files changed: `packages/shared/**`, `schemas/evidence-bundle.schema.json`, `.env.example`, `templates/donebond.policy.example.yml`, `ARCHITECTURE.md`, `CONTRACT_SPEC.md`, `DECISIONS.md`, ADR-004, ADR-005, workspace test wiring, lockfile, and tracker.
+- Verification commands: `pnpm format:check`; `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`; shared build/test/typecheck; JSON schema parse; `git diff --check`; `bash scripts/verify-git-identity.sh`; independent adversarial review and targeted reproductions.
+- Results: Full formatting, lint, typecheck, test, and production build gates passed; shared suite passed 15/15; schema JSON parsed; identity and diff checks passed. Independent reviewer reproduced and then verified fixes for nonzero-exit passing checks, zero-required policies, credentialed remotes, dirty-state contradictions, arbitrary receipt states/digests, signature mutation, and self-declared attacker verifiers; no critical/high finding remains.
+- Security/privacy notes: Evidence status is derived fail-closed from required check/process outcomes; canonical public repository identity cannot carry credentials; mixed-case EVM checksums are validated before lowercase commitment encoding; RPC credentials are rejected; verifier integrity requires trusted deployment configuration.
+- Remaining risks/blockers: Canonical hashing execution and frozen evidence vectors are task 2.5. EIP-712 verifier availability/key rotation remains an explicit MVP operational dependency. Remote publication remains blocked by missing personal GitHub SSH authorization.
+- Commit: pending (this changeset).

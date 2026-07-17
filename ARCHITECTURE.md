@@ -119,7 +119,8 @@ Use UUID/ULID application identifiers and store chain task IDs separately.
 
 ## Canonical hashing
 
-Use a documented canonical JSON strategy with:
+Use RFC 8785 JSON Canonicalization Scheme semantics as specified in
+`docs/adr/ADR-005-canonical-json-and-commitments.md`, with:
 
 - UTF-8 encoding;
 - lexicographically sorted object keys;
@@ -135,13 +136,16 @@ Never hash UI-rendered text or nondeterministic objects.
 Commitments:
 
 ```text
-taskHash     = keccak256(canonicalTask)
-policyHash   = keccak256(canonicalPolicy)
-evidenceHash = keccak256(canonicalEvidence)
+taskHash     = keccak256(UTF8(JCS(CanonicalTaskV1)))
+policyHash   = keccak256(UTF8(JCS(CanonicalPolicyV1)))
+evidenceHash = keccak256(UTF8(JCS(EvidenceBundleV1)))
 commitHash   = bytes32 representation derived from the full Git SHA policy
 ```
 
-Because Git SHA-1/SHA-256 values do not naturally equal an EVM `bytes32` in every repository mode, define a stable conversion such as `keccak256(utf8(fullGitObjectId))` and display both the original Git object ID and derived bytes32 value.
+Because Git SHA-1/SHA-256 values do not naturally equal an EVM `bytes32` in
+every repository mode, derive it as
+`keccak256(UTF8("donebond.git-commit:v1:" + lowercaseGitObjectId))` and display
+both the original Git object ID and derived bytes32 value.
 
 ## Core sequence
 
