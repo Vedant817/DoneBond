@@ -780,4 +780,4 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Results: All gates pass. Task API routes compile as dynamic Node routes with production build: `/api/v1/projects/[projectId]/tasks`, `/api/v1/tasks/[taskId]`, `/api/v1/tasks/[taskId]/chain-intent`, `/api/v1/tasks/[taskId]/chain-transactions`, `/api/v1/chain/reconcile/[transactionId]`.
 - Security/privacy notes: Task creation validates project ownership, policy binding, supported networks, and canonical hashes server-side. Chain intent persists before wallet use and is replay-safe. Wallet outcome rejects browser-confirmed states. Reconciliation hides unknown transactions behind auth boundary. Receipt provider never exposes RPC credentials.
 - Remaining risks/blockers: Push blocked by SSH key issue. Real PostgreSQL and Monad RPC not available for integration tests. Contract not deployed. UI work (Milestone 6) not started.
-- Commit: TBD (pending commit)
+- Commit: `94d29bf4bf5e5c76b9b2301151cbaee842d9bbbb`
