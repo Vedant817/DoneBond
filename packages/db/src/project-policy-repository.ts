@@ -1,5 +1,5 @@
 import { SafeRepositoryUrlSchema } from "@donebond/shared";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, lt, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { DatabaseServiceError, translateDatabaseError } from "./errors.js";
@@ -53,6 +53,21 @@ export interface ProjectView {
   readonly updatedAt: Date;
 }
 
+export interface KeysetCursor {
+  readonly createdAt: Date;
+  readonly publicId: string;
+}
+
+export interface KeysetPagination {
+  readonly cursor?: KeysetCursor;
+  readonly limit: number;
+}
+
+export interface KeysetPage<T> {
+  readonly rows: readonly T[];
+  readonly nextCursor: KeysetCursor | null;
+}
+
 export interface CreatePolicyVersionInput {
   readonly actorUserId: string;
   readonly projectPublicId: string;
@@ -91,11 +106,26 @@ interface AuthorizedProject {
   readonly status: "active" | "archived";
 }
 
+interface ProjectSnapshot extends Omit<ProjectView, "createdAt" | "updatedAt"> {
+  readonly kind: "project";
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+interface PolicySnapshot extends Omit<PolicyVersionView, "canonicalJson" | "createdAt"> {
+  readonly kind: "policy";
+  readonly createdAt: string;
+}
+
+interface StoredReplay {
+  readonly responseSafeJson: unknown;
+  readonly responseStatus: number | null;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const PUBLIC_ID = /^[0-9a-hjkmnp-tv-z]{26}$/u;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const BYTES_32 = /^0x[0-9a-f]{64}$/u;
-const SAFE_SOURCE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))(?!.*\\)(?!.*\0).{1,512}$/u;
 
 function invalid(message: string): DatabaseServiceError {
   return new DatabaseServiceError("DB_INVALID_INPUT", message);
@@ -146,6 +176,7 @@ function assertBranch(value: string): void {
     value.length < 1 ||
     value.length > 255 ||
     value !== value.trim() ||
+    value.startsWith("-") ||
     value.startsWith("/") ||
     value.endsWith("/") ||
     value.endsWith(".") ||
@@ -157,6 +188,20 @@ function assertBranch(value: string): void {
     /[\u0000-\u0020\u007f~^:?*\\[]/u.test(value)
   ) {
     throw invalid("Default branch is not a safe Git branch name");
+  }
+}
+
+function assertSourcePath(value: string): void {
+  const components = value.split("/");
+  if (
+    value.length < 1 ||
+    value.length > 512 ||
+    value.startsWith("/") ||
+    value.includes("\\") ||
+    /[\u0000-\u001f\u007f]/u.test(value) ||
+    components.some((component) => component === "" || component === "." || component === "..")
+  ) {
+    throw invalid("Policy source path is unsafe");
   }
 }
 
@@ -209,7 +254,7 @@ function assertPolicyCreate(input: CreatePolicyVersionInput): void {
   if (!BYTES_32.test(input.policyHash)) {
     throw invalid("Policy hash must be an exact lowercase bytes32 value");
   }
-  if (!SAFE_SOURCE_PATH.test(input.sourcePath)) throw invalid("Policy source path is unsafe");
+  assertSourcePath(input.sourcePath);
   if (input.activate !== undefined && typeof input.activate !== "boolean") {
     throw invalid("Policy activation flag is invalid");
   }
@@ -222,6 +267,16 @@ function assertPolicyCreate(input: CreatePolicyVersionInput): void {
   }
   if (serialized === undefined || serialized.length > 1_048_576) {
     throw invalid("Canonical policy payload is missing or too large");
+  }
+}
+
+function assertPagination(pagination: KeysetPagination): void {
+  if (!Number.isSafeInteger(pagination.limit) || pagination.limit < 1 || pagination.limit > 100) {
+    throw invalid("Pagination limit must be an integer from 1 through 100");
+  }
+  if (pagination.cursor) {
+    assertDate(pagination.cursor.createdAt, "Pagination cursor creation time");
+    assertPublicId(pagination.cursor.publicId, "Pagination cursor public ID");
   }
 }
 
@@ -278,6 +333,160 @@ function policyView(
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+function exactIsoDate(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && date.toISOString() === value ? date : null;
+}
+
+function projectSnapshot(view: ProjectView): ProjectSnapshot {
+  return {
+    kind: "project",
+    publicId: view.publicId,
+    slug: view.slug,
+    name: view.name,
+    repositoryUrl: view.repositoryUrl,
+    defaultBranch: view.defaultBranch,
+    visibility: view.visibility,
+    status: view.status,
+    activePolicyHash: view.activePolicyHash,
+    role: view.role,
+    createdAt: view.createdAt.toISOString(),
+    updatedAt: view.updatedAt.toISOString()
+  };
+}
+
+function parseProjectSnapshot(value: unknown): ProjectView {
+  const keys = [
+    "activePolicyHash",
+    "createdAt",
+    "defaultBranch",
+    "kind",
+    "name",
+    "publicId",
+    "repositoryUrl",
+    "role",
+    "slug",
+    "status",
+    "updatedAt",
+    "visibility"
+  ];
+  if (!isRecord(value) || !hasExactKeys(value, keys) || value.kind !== "project") {
+    throw new DatabaseServiceError("DB_CONFLICT", "Stored project replay snapshot is invalid");
+  }
+  const createdAt = exactIsoDate(value.createdAt);
+  const updatedAt = exactIsoDate(value.updatedAt);
+  if (
+    typeof value.publicId !== "string" ||
+    !PUBLIC_ID.test(value.publicId) ||
+    typeof value.slug !== "string" ||
+    value.slug.length > 63 ||
+    !SLUG.test(value.slug) ||
+    typeof value.name !== "string" ||
+    typeof value.repositoryUrl !== "string" ||
+    typeof value.defaultBranch !== "string" ||
+    (value.visibility !== "private" && value.visibility !== "public") ||
+    (value.status !== "active" && value.status !== "archived") ||
+    (value.activePolicyHash !== null &&
+      (typeof value.activePolicyHash !== "string" || !BYTES_32.test(value.activePolicyHash))) ||
+    (value.role !== "owner" && value.role !== "member") ||
+    !createdAt ||
+    !updatedAt
+  ) {
+    throw new DatabaseServiceError("DB_CONFLICT", "Stored project replay snapshot is invalid");
+  }
+  try {
+    assertNormalizedText(value.name, "Stored project name", 120);
+    assertRepositoryUrl(value.repositoryUrl);
+    assertBranch(value.defaultBranch);
+  } catch {
+    throw new DatabaseServiceError("DB_CONFLICT", "Stored project replay snapshot is invalid");
+  }
+  return {
+    publicId: value.publicId,
+    slug: value.slug,
+    name: value.name,
+    repositoryUrl: value.repositoryUrl,
+    defaultBranch: value.defaultBranch,
+    visibility: value.visibility,
+    status: value.status,
+    activePolicyHash: value.activePolicyHash,
+    role: value.role,
+    createdAt,
+    updatedAt
+  };
+}
+
+function policySnapshot(view: PolicyVersionView): PolicySnapshot {
+  return {
+    kind: "policy",
+    publicId: view.publicId,
+    projectPublicId: view.projectPublicId,
+    schemaVersion: view.schemaVersion,
+    policyHash: view.policyHash,
+    sourcePath: view.sourcePath,
+    active: view.active,
+    createdAt: view.createdAt.toISOString()
+  };
+}
+
+function parsePolicySnapshot(value: unknown): PolicySnapshot {
+  const keys = [
+    "active",
+    "createdAt",
+    "kind",
+    "policyHash",
+    "projectPublicId",
+    "publicId",
+    "schemaVersion",
+    "sourcePath"
+  ];
+  if (!isRecord(value) || !hasExactKeys(value, keys) || value.kind !== "policy") {
+    throw new DatabaseServiceError("DB_CONFLICT", "Stored policy replay snapshot is invalid");
+  }
+  const createdAt = exactIsoDate(value.createdAt);
+  if (
+    typeof value.publicId !== "string" ||
+    !PUBLIC_ID.test(value.publicId) ||
+    typeof value.projectPublicId !== "string" ||
+    !PUBLIC_ID.test(value.projectPublicId) ||
+    !Number.isSafeInteger(value.schemaVersion) ||
+    (value.schemaVersion as number) <= 0 ||
+    typeof value.policyHash !== "string" ||
+    !BYTES_32.test(value.policyHash) ||
+    typeof value.sourcePath !== "string" ||
+    typeof value.active !== "boolean" ||
+    !createdAt
+  ) {
+    throw new DatabaseServiceError("DB_CONFLICT", "Stored policy replay snapshot is invalid");
+  }
+  try {
+    assertSourcePath(value.sourcePath);
+  } catch {
+    throw new DatabaseServiceError("DB_CONFLICT", "Stored policy replay snapshot is invalid");
+  }
+  return {
+    kind: "policy",
+    publicId: value.publicId,
+    projectPublicId: value.projectPublicId,
+    schemaVersion: value.schemaVersion as number,
+    policyHash: value.policyHash,
+    sourcePath: value.sourcePath,
+    active: value.active,
+    createdAt: value.createdAt as string
+  };
+}
+
 export class DrizzleProjectPolicyRepository {
   public constructor(private readonly database: Database) {}
 
@@ -289,10 +498,16 @@ export class DrizzleProjectPolicyRepository {
     assertIdempotency(idempotency, input.actorUserId, "project_create");
     try {
       return await this.database.transaction(async (transaction) => {
-        const reserved = await this.reserve(transaction, idempotency, input.publicId);
-        if (!reserved) {
-          const existing = await this.replayedProject(transaction, input, idempotency);
-          return this.publicProject(existing, null, "owner");
+        const reservationId = await this.reserve(transaction, idempotency, input.publicId);
+        if (!reservationId) {
+          await this.requireProject(
+            transaction,
+            input.publicId,
+            input.actorUserId,
+            "owner",
+            "share"
+          );
+          return this.replayProject(transaction, idempotency, input.publicId, 201);
         }
         const [created] = await transaction
           .insert(projects)
@@ -320,7 +535,9 @@ export class DrizzleProjectPolicyRepository {
           action: "project.created",
           metadataSafeJson: { projectPublicId: input.publicId }
         });
-        return this.publicProject(created, null, "owner");
+        const result = this.publicProject(created, null, "owner");
+        await this.completeReservation(transaction, reservationId, 201, projectSnapshot(result));
+        return result;
       });
     } catch (error) {
       throw translateDatabaseError(error);
@@ -343,14 +560,30 @@ export class DrizzleProjectPolicyRepository {
     }
   }
 
-  public async listProjects(actorUserId: string): Promise<readonly ProjectView[]> {
+  public async listProjects(
+    actorUserId: string,
+    pagination: KeysetPagination
+  ): Promise<KeysetPage<ProjectView>> {
     assertUuid(actorUserId, "Project actor user ID");
+    assertPagination(pagination);
     try {
-      const rows = await this.projectReadQuery(this.database, actorUserId).orderBy(
-        desc(projects.createdAt),
-        desc(projects.publicId)
-      );
-      return rows.map(projectView);
+      const rows = await this.projectReadQuery(
+        this.database,
+        actorUserId,
+        undefined,
+        pagination.cursor
+      )
+        .orderBy(desc(projects.createdAt), desc(projects.publicId))
+        .limit(pagination.limit + 1);
+      const visibleRows = rows.slice(0, pagination.limit).map(projectView);
+      const last = visibleRows.at(-1);
+      return {
+        rows: visibleRows,
+        nextCursor:
+          rows.length > pagination.limit && last
+            ? { createdAt: last.createdAt, publicId: last.publicId }
+            : null
+      };
     } catch (error) {
       throw translateDatabaseError(error);
     }
@@ -371,10 +604,9 @@ export class DrizzleProjectPolicyRepository {
           "owner",
           "update"
         );
-        const reserved = await this.reserve(transaction, idempotency, input.projectPublicId);
-        if (!reserved) {
-          await this.assertReplay(transaction, idempotency, input.projectPublicId);
-          return this.projectById(transaction, project.id, project.role);
+        const reservationId = await this.reserve(transaction, idempotency, input.projectPublicId);
+        if (!reservationId) {
+          return this.replayProject(transaction, idempotency, input.projectPublicId, 200);
         }
         const patch = {
           ...(input.name === undefined ? {} : { name: input.name }),
@@ -414,11 +646,13 @@ export class DrizzleProjectPolicyRepository {
               .sort()
           }
         });
-        return this.publicProject(
+        const result = this.publicProject(
           updated,
           await this.activePolicyHash(transaction, updated.activePolicyId),
           project.role
         );
+        await this.completeReservation(transaction, reservationId, 200, projectSnapshot(result));
+        return result;
       });
     } catch (error) {
       throw translateDatabaseError(error);
@@ -440,6 +674,17 @@ export class DrizzleProjectPolicyRepository {
           "owner",
           input.activate === true ? "update" : "share"
         );
+        const reservationId = await this.reserve(transaction, idempotency, input.policyPublicId);
+        if (!reservationId) {
+          return this.replayPolicy(
+            transaction,
+            idempotency,
+            project.id,
+            input.projectPublicId,
+            input.policyPublicId,
+            [200, 201]
+          );
+        }
         if (project.status !== "active") {
           throw new DatabaseServiceError(
             "DB_PROJECT_ARCHIVED",
@@ -464,12 +709,8 @@ export class DrizzleProjectPolicyRepository {
               "Policy hash already identifies a different immutable version"
             );
           }
-          const reservedExisting = await this.reserve(transaction, idempotency, sameHash.publicId);
-          if (!reservedExisting) {
-            await this.assertReplay(transaction, idempotency, sameHash.publicId);
-          }
           let activePolicyId = project.activePolicyId;
-          if (reservedExisting && input.activate === true && activePolicyId !== sameHash.id) {
+          if (input.activate === true && activePolicyId !== sameHash.id) {
             await this.switchActivePolicy(
               transaction,
               project.id,
@@ -479,31 +720,9 @@ export class DrizzleProjectPolicyRepository {
             );
             activePolicyId = sameHash.id;
           }
-          return policyView(sameHash, input.projectPublicId, activePolicyId);
-        }
-        const reserved = await this.reserve(transaction, idempotency, input.policyPublicId);
-        if (!reserved) {
-          await this.assertReplay(transaction, idempotency, input.policyPublicId);
-          const [existing] = await transaction
-            .select()
-            .from(policies)
-            .where(
-              and(eq(policies.publicId, input.policyPublicId), eq(policies.projectId, project.id))
-            )
-            .limit(1);
-          if (
-            !existing ||
-            existing.schemaVersion !== input.schemaVersion ||
-            existing.policyHash !== input.policyHash ||
-            existing.sourcePath !== input.sourcePath ||
-            !sameJson(existing.canonicalJson, input.canonicalJson)
-          ) {
-            throw new DatabaseServiceError(
-              "DB_IDEMPOTENCY_CONFLICT",
-              "Policy replay differs from the immutable version"
-            );
-          }
-          return policyView(existing, input.projectPublicId, project.activePolicyId);
+          const result = policyView(sameHash, input.projectPublicId, activePolicyId);
+          await this.completeReservation(transaction, reservationId, 200, policySnapshot(result));
+          return result;
         }
         const [created] = await transaction
           .insert(policies)
@@ -539,7 +758,9 @@ export class DrizzleProjectPolicyRepository {
           );
           activePolicyId = created.id;
         }
-        return policyView(created, input.projectPublicId, activePolicyId);
+        const result = policyView(created, input.projectPublicId, activePolicyId);
+        await this.completeReservation(transaction, reservationId, 201, policySnapshot(result));
+        return result;
       });
     } catch (error) {
       throw translateDatabaseError(error);
@@ -564,6 +785,17 @@ export class DrizzleProjectPolicyRepository {
           "owner",
           "update"
         );
+        const reservationId = await this.reserve(transaction, idempotency, input.policyPublicId);
+        if (!reservationId) {
+          return this.replayPolicy(
+            transaction,
+            idempotency,
+            project.id,
+            input.projectPublicId,
+            input.policyPublicId,
+            [200]
+          );
+        }
         if (project.status !== "active") {
           throw new DatabaseServiceError(
             "DB_PROJECT_ARCHIVED",
@@ -579,13 +811,11 @@ export class DrizzleProjectPolicyRepository {
           .for("share")
           .limit(1);
         if (!policy) throw notFound();
-        const reserved = await this.reserve(transaction, idempotency, input.policyPublicId);
-        if (!reserved) {
-          await this.assertReplay(transaction, idempotency, input.policyPublicId);
-          return policyView(policy, input.projectPublicId, project.activePolicyId);
+        if (project.activePolicyId === policy.id) {
+          const result = policyView(policy, input.projectPublicId, project.activePolicyId);
+          await this.completeReservation(transaction, reservationId, 200, policySnapshot(result));
+          return result;
         }
-        if (project.activePolicyId === policy.id)
-          return policyView(policy, input.projectPublicId, project.activePolicyId);
         const [updated] = await transaction
           .update(projects)
           .set({ activePolicyId: policy.id, updatedAt: input.activatedAt })
@@ -599,7 +829,9 @@ export class DrizzleProjectPolicyRepository {
           action: "policy.activated",
           metadataSafeJson: { policyPublicId: input.policyPublicId, policyHash: policy.policyHash }
         });
-        return policyView(policy, input.projectPublicId, policy.id);
+        const result = policyView(policy, input.projectPublicId, policy.id);
+        await this.completeReservation(transaction, reservationId, 200, policySnapshot(result));
+        return result;
       });
     } catch (error) {
       throw translateDatabaseError(error);
@@ -608,10 +840,12 @@ export class DrizzleProjectPolicyRepository {
 
   public async listPolicyVersions(
     projectPublicId: string,
-    actorUserId: string
-  ): Promise<readonly PolicyVersionView[] | null> {
+    actorUserId: string,
+    pagination: KeysetPagination
+  ): Promise<KeysetPage<PolicyVersionView> | null> {
     assertPublicId(projectPublicId, "Project public ID");
     assertUuid(actorUserId, "Policy actor user ID");
+    assertPagination(pagination);
     try {
       return await this.database.transaction(async (transaction) => {
         const project = await this.requireProject(
@@ -623,12 +857,36 @@ export class DrizzleProjectPolicyRepository {
           true
         );
         if (!project) return null;
+        const cursorPredicate = pagination.cursor
+          ? or(
+              lt(policies.createdAt, pagination.cursor.createdAt),
+              and(
+                eq(policies.createdAt, pagination.cursor.createdAt),
+                lt(policies.publicId, pagination.cursor.publicId)
+              )
+            )
+          : undefined;
         const rows = await transaction
           .select()
           .from(policies)
-          .where(eq(policies.projectId, project.id))
-          .orderBy(desc(policies.createdAt), desc(policies.publicId));
-        return rows.map((row) => policyView(row, projectPublicId, project.activePolicyId));
+          .where(
+            cursorPredicate
+              ? and(eq(policies.projectId, project.id), cursorPredicate)
+              : eq(policies.projectId, project.id)
+          )
+          .orderBy(desc(policies.createdAt), desc(policies.publicId))
+          .limit(pagination.limit + 1);
+        const visibleRows = rows
+          .slice(0, pagination.limit)
+          .map((row) => policyView(row, projectPublicId, project.activePolicyId));
+        const last = visibleRows.at(-1);
+        return {
+          rows: visibleRows,
+          nextCursor:
+            rows.length > pagination.limit && last
+              ? { createdAt: last.createdAt, publicId: last.publicId }
+              : null
+        };
       });
     } catch (error) {
       throw translateDatabaseError(error);
@@ -669,8 +927,19 @@ export class DrizzleProjectPolicyRepository {
   private projectReadQuery(
     database: Database | Transaction,
     actorUserId: string,
-    projectPublicId?: string
+    projectPublicId?: string,
+    cursor?: KeysetCursor
   ) {
+    const cursorPredicate = cursor
+      ? or(
+          lt(projects.createdAt, cursor.createdAt),
+          and(eq(projects.createdAt, cursor.createdAt), lt(projects.publicId, cursor.publicId))
+        )
+      : undefined;
+    const accessPredicate =
+      projectPublicId === undefined
+        ? eq(projectMembers.userId, actorUserId)
+        : and(eq(projectMembers.userId, actorUserId), eq(projects.publicId, projectPublicId));
     return database
       .select({
         publicId: projects.publicId,
@@ -688,11 +957,7 @@ export class DrizzleProjectPolicyRepository {
       .from(projectMembers)
       .innerJoin(projects, eq(projects.id, projectMembers.projectId))
       .leftJoin(policies, eq(policies.id, projects.activePolicyId))
-      .where(
-        projectPublicId === undefined
-          ? eq(projectMembers.userId, actorUserId)
-          : and(eq(projectMembers.userId, actorUserId), eq(projects.publicId, projectPublicId))
-      );
+      .where(cursorPredicate ? and(accessPredicate, cursorPredicate) : accessPredicate);
   }
 
   private async requireProject(
@@ -758,7 +1023,7 @@ export class DrizzleProjectPolicyRepository {
     transaction: Transaction,
     idempotency: IdempotencyContext,
     resourcePublicId: string
-  ): Promise<boolean> {
+  ): Promise<string | null> {
     const rows = await transaction
       .insert(apiIdempotencyKeys)
       .values({ ...idempotency, resourcePublicId })
@@ -770,14 +1035,31 @@ export class DrizzleProjectPolicyRepository {
         ]
       })
       .returning({ id: apiIdempotencyKeys.id });
-    return rows.length === 1;
+    return rows[0]?.id ?? null;
   }
 
-  private async assertReplay(
+  private async completeReservation(
+    transaction: Transaction,
+    reservationId: string,
+    responseStatus: number,
+    responseSafeJson: ProjectSnapshot | PolicySnapshot
+  ): Promise<void> {
+    const completed = await transaction
+      .update(apiIdempotencyKeys)
+      .set({ responseSafeJson, responseStatus })
+      .where(eq(apiIdempotencyKeys.id, reservationId))
+      .returning({ id: apiIdempotencyKeys.id });
+    if (completed.length !== 1) {
+      throw new DatabaseServiceError("DB_CONFLICT", "Idempotency response could not be persisted");
+    }
+  }
+
+  private async replay(
     transaction: Transaction,
     idempotency: IdempotencyContext,
-    resourcePublicId: string
-  ): Promise<void> {
+    resourcePublicId: string,
+    allowedStatuses: readonly number[]
+  ): Promise<StoredReplay> {
     const [existing] = await transaction
       .select()
       .from(apiIdempotencyKeys)
@@ -800,34 +1082,71 @@ export class DrizzleProjectPolicyRepository {
         "Idempotency key was already used with different project or policy content"
       );
     }
+    if (
+      existing.responseSafeJson === null ||
+      existing.responseSafeJson === undefined ||
+      existing.responseStatus === null ||
+      !allowedStatuses.includes(existing.responseStatus)
+    ) {
+      throw new DatabaseServiceError("DB_CONFLICT", "Stored idempotency response is incomplete");
+    }
+    return {
+      responseSafeJson: existing.responseSafeJson,
+      responseStatus: existing.responseStatus
+    };
   }
 
-  private async replayedProject(
+  private async replayProject(
     transaction: Transaction,
-    input: CreateProjectInput,
-    idempotency: IdempotencyContext
-  ): Promise<typeof projects.$inferSelect> {
-    await this.assertReplay(transaction, idempotency, input.publicId);
-    const [existing] = await transaction
+    idempotency: IdempotencyContext,
+    resourcePublicId: string,
+    responseStatus: number
+  ): Promise<ProjectView> {
+    const stored = await this.replay(transaction, idempotency, resourcePublicId, [responseStatus]);
+    const snapshot = parseProjectSnapshot(stored.responseSafeJson);
+    if (snapshot.publicId !== resourcePublicId || snapshot.role !== "owner") {
+      throw new DatabaseServiceError("DB_CONFLICT", "Stored project replay binding is invalid");
+    }
+    return snapshot;
+  }
+
+  private async replayPolicy(
+    transaction: Transaction,
+    idempotency: IdempotencyContext,
+    projectId: string,
+    projectPublicId: string,
+    policyPublicId: string,
+    allowedStatuses: readonly number[]
+  ): Promise<PolicyVersionView> {
+    const stored = await this.replay(transaction, idempotency, policyPublicId, allowedStatuses);
+    const snapshot = parsePolicySnapshot(stored.responseSafeJson);
+    if (snapshot.publicId !== policyPublicId || snapshot.projectPublicId !== projectPublicId) {
+      throw new DatabaseServiceError("DB_CONFLICT", "Stored policy replay binding is invalid");
+    }
+    const [policy] = await transaction
       .select()
-      .from(projects)
-      .where(eq(projects.publicId, input.publicId))
+      .from(policies)
+      .where(and(eq(policies.projectId, projectId), eq(policies.publicId, policyPublicId)))
       .limit(1);
     if (
-      !existing ||
-      existing.ownerUserId !== input.actorUserId ||
-      existing.slug !== input.slug ||
-      existing.name !== input.name ||
-      existing.repositoryUrl !== input.repositoryUrl ||
-      existing.defaultBranch !== input.defaultBranch ||
-      existing.visibility !== input.visibility
+      !policy ||
+      policy.schemaVersion !== snapshot.schemaVersion ||
+      policy.policyHash !== snapshot.policyHash ||
+      policy.sourcePath !== snapshot.sourcePath ||
+      policy.createdAt.getTime() !== exactIsoDate(snapshot.createdAt)?.getTime()
     ) {
-      throw new DatabaseServiceError(
-        "DB_IDEMPOTENCY_CONFLICT",
-        "Project replay differs from the persisted project"
-      );
+      throw new DatabaseServiceError("DB_CONFLICT", "Stored policy replay binding is invalid");
     }
-    return existing;
+    return {
+      publicId: snapshot.publicId,
+      projectPublicId: snapshot.projectPublicId,
+      schemaVersion: snapshot.schemaVersion,
+      canonicalJson: policy.canonicalJson,
+      policyHash: snapshot.policyHash,
+      sourcePath: snapshot.sourcePath,
+      active: snapshot.active,
+      createdAt: policy.createdAt
+    };
   }
 
   private async activePolicyHash(
@@ -842,24 +1161,6 @@ export class DrizzleProjectPolicyRepository {
       .limit(1);
     if (!policy) throw new DatabaseServiceError("DB_CONFLICT", "Active policy binding is missing");
     return policy.policyHash;
-  }
-
-  private async projectById(
-    transaction: Transaction,
-    projectId: string,
-    role: ProjectRole
-  ): Promise<ProjectView> {
-    const [row] = await transaction
-      .select()
-      .from(projects)
-      .where(eq(projects.id, projectId))
-      .limit(1);
-    if (!row) throw new DatabaseServiceError("DB_CONFLICT", "Project replay lost its resource");
-    return this.publicProject(
-      row,
-      await this.activePolicyHash(transaction, row.activePolicyId),
-      role
-    );
   }
 
   private async switchActivePolicy(

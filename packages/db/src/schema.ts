@@ -20,8 +20,12 @@ import {
   varchar
 } from "drizzle-orm/pg-core";
 
-const createdAt = timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
-const updatedAt = timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
+const createdAt = timestamp("created_at", { withTimezone: true, precision: 3 })
+  .notNull()
+  .defaultNow();
+const updatedAt = timestamp("updated_at", { withTimezone: true, precision: 3 })
+  .notNull()
+  .defaultNow();
 
 function policyIdColumn(): AnyPgColumn {
   return policies.id;
@@ -309,6 +313,10 @@ export const projects = pgTable(
     check(
       "projects_repository_url_no_credentials",
       sql`${table.repositoryUrl} !~ '^[a-zA-Z][a-zA-Z0-9+.-]*://[^/@]+@'`
+    ),
+    check(
+      "projects_default_branch_not_option",
+      sql`${table.defaultBranch} <> '' and ${table.defaultBranch} not like '-%' and ${table.defaultBranch} !~ '[[:cntrl:]]'`
     )
   ]
 );
@@ -355,7 +363,7 @@ export const policies = pgTable(
     check("policies_hash_format", sql`${table.policyHash} ~ '^0x[0-9a-f]{64}$'`),
     check(
       "policies_source_relative",
-      sql`${table.sourcePath} not like '/%' and ${table.sourcePath} <> '..' and ${table.sourcePath} not like '../%' and ${table.sourcePath} not like '%/..' and ${table.sourcePath} not like '%/../%' and position(chr(92) in ${table.sourcePath}) = 0`
+      sql`${table.sourcePath} <> '' and ${table.sourcePath} not like '/%' and ${table.sourcePath} not like '%/' and ${table.sourcePath} not like '%//%' and ${table.sourcePath} <> '.' and ${table.sourcePath} not like './%' and ${table.sourcePath} not like '%/.' and ${table.sourcePath} not like '%/./%' and ${table.sourcePath} <> '..' and ${table.sourcePath} not like '../%' and ${table.sourcePath} not like '%/..' and ${table.sourcePath} not like '%/../%' and position(chr(92) in ${table.sourcePath}) = 0 and ${table.sourcePath} !~ '[[:cntrl:]]'`
     )
   ]
 );
@@ -690,6 +698,8 @@ export const apiIdempotencyKeys = pgTable(
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
     requestHash: varchar("request_hash", { length: 66 }).notNull(),
     resourcePublicId: varchar("resource_public_id", { length: 26 }).notNull(),
+    responseSafeJson: jsonb("response_safe_json"),
+    responseStatus: integer("response_status"),
     createdAt,
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull()
   },
@@ -704,6 +714,10 @@ export const apiIdempotencyKeys = pgTable(
     check(
       "api_idempotency_resource_public_id_format",
       sql`${table.resourcePublicId} ~ '^[0-9a-hjkmnp-tv-z]{26}$'`
+    ),
+    check(
+      "api_idempotency_response_complete",
+      sql`(${table.responseSafeJson} is null and ${table.responseStatus} is null) or (${table.responseSafeJson} is not null and ${table.responseStatus} between 200 and 299)`
     ),
     check("api_idempotency_expiry_after_creation", sql`${table.expiresAt} > ${table.createdAt}`)
   ]

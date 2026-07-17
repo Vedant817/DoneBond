@@ -35,6 +35,9 @@ function createFakeDatabase({ selects = [], returns = [] } = {}) {
         return builder;
       },
       returning() {
+        if (kind === "update" && table === apiIdempotencyKeys) {
+          return Promise.resolve([{ id: "idem" }]);
+        }
         return Promise.resolve(returns.shift() ?? []);
       },
       then(resolve, reject) {
@@ -70,12 +73,13 @@ function createFakeDatabase({ selects = [], returns = [] } = {}) {
           call.lock = lock;
           return builder;
         },
-        limit() {
+        limit(limit) {
+          call.limit = limit;
           return Promise.resolve(selects.shift() ?? []);
         },
         orderBy(...order) {
           call.order = order;
-          return Promise.resolve(selects.shift() ?? []);
+          return builder;
         }
       };
       return builder;
@@ -127,6 +131,7 @@ const ownerAuthorization = {
   ownerUserId,
   userId: ownerUserId,
   role: "owner",
+  repositoryUrl: projectInput.repositoryUrl,
   status: "active"
 };
 const memberAuthorization = {
@@ -169,6 +174,54 @@ function idempotency(operation, key = `${operation}-key`, requestHash = `0x${"b"
   };
 }
 
+function projectReplay(overrides = {}) {
+  const view = {
+    publicId: projectPublicId,
+    slug: projectInput.slug,
+    name: projectInput.name,
+    repositoryUrl: projectInput.repositoryUrl,
+    defaultBranch: projectInput.defaultBranch,
+    visibility: "private",
+    status: "active",
+    activePolicyHash: null,
+    role: "owner",
+    createdAt: createdAt.toISOString(),
+    updatedAt: createdAt.toISOString(),
+    ...overrides
+  };
+  return {
+    actorScope: `user:${ownerUserId}`,
+    operation: "project_create",
+    idempotencyKey: "project_create-key",
+    requestHash: `0x${"b".repeat(64)}`,
+    resourcePublicId: projectPublicId,
+    responseStatus: 201,
+    responseSafeJson: { kind: "project", ...view }
+  };
+}
+
+function policyReplay(operation, overrides = {}) {
+  return {
+    actorScope: `user:${ownerUserId}`,
+    operation,
+    idempotencyKey: `${operation}-key`,
+    requestHash: `0x${"b".repeat(64)}`,
+    resourcePublicId: policyPublicId,
+    responseStatus: operation === "policy_create" ? 201 : 200,
+    responseSafeJson: {
+      kind: "policy",
+      publicId: policyPublicId,
+      projectPublicId,
+      schemaVersion: 1,
+      policyHash,
+      sourcePath: policyInput.sourcePath,
+      active: true,
+      createdAt: createdAt.toISOString(),
+      ...overrides
+    }
+  };
+}
+
 test("project create returns a public DTO and atomically binds owner, idempotency, and audit", async () => {
   const database = createFakeDatabase({
     returns: [[{ id: "idem" }], [storedProject]]
@@ -197,26 +250,30 @@ test("project create returns a public DTO and atomically binds owner, idempotenc
   );
 });
 
-test("project create exact replay succeeds while changed content conflicts", async () => {
-  const replay = {
-    actorScope: `user:${ownerUserId}`,
-    operation: "project_create",
-    idempotencyKey: "project_create-key",
-    requestHash: `0x${"b".repeat(64)}`,
-    resourcePublicId: projectPublicId
-  };
+test("project create replay returns its original snapshot after a later update", async () => {
+  const replay = projectReplay();
   const exactDatabase = createFakeDatabase({
-    selects: [[replay], [storedProject]],
+    selects: [[{ ...ownerAuthorization, status: "archived", activePolicyId: policyId }], [replay]],
     returns: [[]]
   });
-  assert.equal(
-    (
-      await new DrizzleProjectPolicyRepository(exactDatabase).createProject(
-        projectInput,
-        idempotency("project_create")
-      )
-    ).publicId,
-    projectPublicId
+  assert.deepEqual(
+    await new DrizzleProjectPolicyRepository(exactDatabase).createProject(
+      projectInput,
+      idempotency("project_create")
+    ),
+    {
+      publicId: projectPublicId,
+      slug: projectInput.slug,
+      name: projectInput.name,
+      repositoryUrl: projectInput.repositoryUrl,
+      defaultBranch: projectInput.defaultBranch,
+      visibility: "private",
+      status: "active",
+      activePolicyHash: null,
+      role: "owner",
+      createdAt,
+      updatedAt: createdAt
+    }
   );
   assert.equal(
     exactDatabase.calls.some((call) => call.table === auditEvents),
@@ -224,7 +281,7 @@ test("project create exact replay succeeds while changed content conflicts", asy
   );
 
   const conflictDatabase = createFakeDatabase({
-    selects: [[replay], [{ ...storedProject, repositoryUrl: "https://example.test/other.git" }]],
+    selects: [[ownerAuthorization], [{ ...replay, requestHash: `0x${"c".repeat(64)}` }]],
     returns: [[]]
   });
   await assert.rejects(
@@ -236,7 +293,7 @@ test("project create exact replay succeeds while changed content conflicts", asy
   );
 });
 
-test("project read and list are member-scoped, ordered, and omit internal identifiers", async () => {
+test("project read and list are member-scoped, keyset-bounded, and omit internal identifiers", async () => {
   const projected = {
     publicId: projectPublicId,
     slug: "donebond",
@@ -250,14 +307,21 @@ test("project read and list are member-scoped, ordered, and omit internal identi
     createdAt,
     updatedAt
   };
-  const database = createFakeDatabase({ selects: [[projected], [projected]] });
+  const older = {
+    ...projected,
+    publicId: "01arz3ndektsv4rrffq69g5fac",
+    createdAt: new Date("2026-07-17T07:00:00.000Z")
+  };
+  const database = createFakeDatabase({ selects: [[projected], [projected, older]] });
   const repository = new DrizzleProjectPolicyRepository(database);
   assert.deepEqual(await repository.findProject(projectPublicId, memberUserId), projected);
-  const listed = await repository.listProjects(memberUserId);
-  assert.deepEqual(listed, [projected]);
-  assert.equal("id" in listed[0], false);
+  const listed = await repository.listProjects(memberUserId, { limit: 1 });
+  assert.deepEqual(listed.rows, [projected]);
+  assert.deepEqual(listed.nextCursor, { createdAt, publicId: projectPublicId });
+  assert.equal("id" in listed.rows[0], false);
   const listCall = database.calls.find((call) => call.order);
   assert.equal(listCall.order.length, 2);
+  assert.equal(listCall.limit, 2);
 });
 
 test("project metadata validation rejects credential, query, and unsafe branch input before DB", async () => {
@@ -333,6 +397,35 @@ test("owner update is audited while member update and post-task repository mutat
   assert(taskBoundDatabase.calls.some((call) => call.table === tasks));
 });
 
+test("project update replay returns update A after update B changes current state", async () => {
+  const original = projectReplay({
+    name: "Update A",
+    updatedAt: updatedAt.toISOString()
+  });
+  original.operation = "project_update";
+  original.idempotencyKey = "project_update-key";
+  original.responseStatus = 200;
+  const database = createFakeDatabase({
+    selects: [[{ ...ownerAuthorization, status: "archived" }], [original]],
+    returns: [[]]
+  });
+  const replayed = await new DrizzleProjectPolicyRepository(database).updateProject(
+    {
+      actorUserId: ownerUserId,
+      projectPublicId,
+      changedAt: updatedAt,
+      name: "Update A"
+    },
+    idempotency("project_update")
+  );
+  assert.equal(replayed.name, "Update A");
+  assert.equal(replayed.status, "active");
+  assert.equal(
+    database.calls.some((call) => call.table === auditEvents),
+    false
+  );
+});
+
 test("owner creates immutable policy; exact same hash under a new key returns existing", async () => {
   const createDatabase = createFakeDatabase({
     selects: [[ownerAuthorization], []],
@@ -345,6 +438,12 @@ test("owner creates immutable policy; exact same hash under a new key returns ex
   assert.equal(created.publicId, policyPublicId);
   assert.equal(created.active, false);
   assert.equal("id" in created, false);
+  const storedSnapshot = createDatabase.calls.find(
+    (call) => call.kind === "update" && call.table === apiIdempotencyKeys
+  );
+  assert.equal(storedSnapshot.set.responseStatus, 201);
+  assert.equal("canonicalJson" in storedSnapshot.set.responseSafeJson, false);
+  assert.equal("id" in storedSnapshot.set.responseSafeJson, false);
   assert.deepEqual(
     createDatabase.calls.filter((call) => call.kind === "insert").map((call) => call.table),
     [apiIdempotencyKeys, policies, auditEvents]
@@ -365,6 +464,33 @@ test("owner creates immutable policy; exact same hash under a new key returns ex
   );
   assert.equal(
     existingDatabase.calls.some((call) => call.table === auditEvents),
+    false
+  );
+});
+
+test("create-and-activate replay survives another activation and project archive", async () => {
+  const database = createFakeDatabase({
+    selects: [
+      [
+        {
+          ...ownerAuthorization,
+          activePolicyId: "00000000-0000-4000-8000-000000000699",
+          status: "archived"
+        }
+      ],
+      [policyReplay("policy_create")],
+      [storedPolicy]
+    ],
+    returns: [[]]
+  });
+  const replayed = await new DrizzleProjectPolicyRepository(database).createPolicyVersion(
+    { ...policyInput, activate: true, activatedAt: updatedAt },
+    idempotency("policy_create")
+  );
+  assert.equal(replayed.active, true);
+  assert.deepEqual(replayed.canonicalJson, canonicalJson);
+  assert.equal(
+    database.calls.some((call) => call.table === auditEvents),
     false
   );
 });
@@ -397,7 +523,8 @@ test("policy upload can create, activate, and write both audits in one transacti
 
 test("policy hash collision, uppercase hash, member upload, and archived project fail closed", async () => {
   const collisionDatabase = createFakeDatabase({
-    selects: [[ownerAuthorization], [{ ...storedPolicy, publicId: "01arz3ndektsv4rrffq69g5fac" }]]
+    selects: [[ownerAuthorization], [{ ...storedPolicy, publicId: "01arz3ndektsv4rrffq69g5fac" }]],
+    returns: [[{ id: "idem" }]]
   });
   await assert.rejects(
     new DrizzleProjectPolicyRepository(collisionDatabase).createPolicyVersion(
@@ -417,11 +544,11 @@ test("policy hash collision, uppercase hash, member upload, and archived project
   );
   assert.equal(malformedDatabase.calls.length, 0);
 
-  for (const [authorization, expectedCode] of [
-    [memberAuthorization, "DB_NOT_FOUND"],
-    [{ ...ownerAuthorization, status: "archived" }, "DB_PROJECT_ARCHIVED"]
+  for (const [authorization, expectedCode, returns] of [
+    [memberAuthorization, "DB_NOT_FOUND", []],
+    [{ ...ownerAuthorization, status: "archived" }, "DB_PROJECT_ARCHIVED", [[{ id: "idem" }]]]
   ]) {
-    const database = createFakeDatabase({ selects: [[authorization]] });
+    const database = createFakeDatabase({ selects: [[authorization]], returns });
     await assert.rejects(
       new DrizzleProjectPolicyRepository(database).createPolicyVersion(
         policyInput,
@@ -430,27 +557,78 @@ test("policy hash collision, uppercase hash, member upload, and archived project
       (error) => error.code === expectedCode
     );
     assert.equal(
-      database.calls.some((call) => call.kind === "insert"),
+      database.calls.some(
+        (call) => call.kind === "insert" && [policies, auditEvents].includes(call.table)
+      ),
       false
     );
   }
 });
 
-test("policy history uses creation/public ID order and marks only active identity", async () => {
+test("source paths and leading-dash branches fail before database access", async () => {
+  for (const sourcePath of [
+    "./policy.json",
+    "policy/./check.json",
+    "policy/../check.json",
+    "policy//check.json",
+    "policy\\check.json",
+    "policy/\u0001check.json"
+  ]) {
+    const database = createFakeDatabase();
+    await assert.rejects(
+      new DrizzleProjectPolicyRepository(database).createPolicyVersion(
+        { ...policyInput, sourcePath },
+        idempotency("policy_create")
+      ),
+      /source path/
+    );
+    assert.equal(database.calls.length, 0);
+  }
+  const database = createFakeDatabase();
+  await assert.rejects(
+    new DrizzleProjectPolicyRepository(database).createProject(
+      { ...projectInput, defaultBranch: "-main" },
+      idempotency("project_create")
+    ),
+    /branch/
+  );
+  assert.equal(database.calls.length, 0);
+});
+
+test("pagination rejects unbounded limits and malformed cursors before querying", async () => {
+  for (const pagination of [
+    { limit: 0 },
+    { limit: 101 },
+    { limit: 1.5 },
+    { limit: 10, cursor: { createdAt: new Date("invalid"), publicId: projectPublicId } },
+    { limit: 10, cursor: { createdAt, publicId: "not-a-public-id" } }
+  ]) {
+    const database = createFakeDatabase();
+    await assert.rejects(
+      new DrizzleProjectPolicyRepository(database).listProjects(ownerUserId, pagination),
+      (error) => error.code === "DB_INVALID_INPUT"
+    );
+    assert.equal(database.calls.length, 0);
+  }
+});
+
+test("policy history uses bounded creation/public ID keysets and marks only active identity", async () => {
   const older = { ...storedPolicy, id: "00000000-0000-4000-8000-000000000605" };
   const project = { ...ownerAuthorization, activePolicyId: policyId };
   const database = createFakeDatabase({ selects: [[project], [storedPolicy, older]] });
   const history = await new DrizzleProjectPolicyRepository(database).listPolicyVersions(
     projectPublicId,
-    ownerUserId
+    ownerUserId,
+    { limit: 1 }
   );
   assert.deepEqual(
-    history?.map((item) => item.active),
-    [true, false]
+    history?.rows.map((item) => item.active),
+    [true]
   );
-  assert.equal(history?.[0].schemaVersion, history?.[1].schemaVersion);
+  assert.deepEqual(history?.nextCursor, { createdAt, publicId: policyPublicId });
   const historyCall = database.calls.find((call) => call.table === policies && call.order);
   assert.equal(historyCall.order.length, 2);
+  assert.equal(historyCall.limit, 2);
 });
 
 test("member policy detail is project-scoped and includes canonical content", async () => {
@@ -490,22 +668,14 @@ test("activation is owner/project-bound, project-locked, idempotent, and audit-c
     database.calls
       .filter((call) => ["update", "insert"].includes(call.kind))
       .map((call) => call.table),
-    [apiIdempotencyKeys, projects, auditEvents]
+    [apiIdempotencyKeys, projects, auditEvents, apiIdempotencyKeys]
   );
 
   const replayDatabase = createFakeDatabase({
     selects: [
-      [{ ...ownerAuthorization, activePolicyId: policyId }],
-      [storedPolicy],
-      [
-        {
-          actorScope: `user:${ownerUserId}`,
-          operation: "policy_activate",
-          idempotencyKey: "policy_activate-key",
-          requestHash: `0x${"b".repeat(64)}`,
-          resourcePublicId: policyPublicId
-        }
-      ]
+      [{ ...ownerAuthorization, activePolicyId: null }],
+      [policyReplay("policy_activate")],
+      [storedPolicy]
     ],
     returns: [[]]
   });
@@ -531,15 +701,16 @@ test("activation is owner/project-bound, project-locked, idempotent, and audit-c
 
 test("member, archived, missing, and cross-project policy activation cannot mutate", async () => {
   const cases = [
-    { selects: [[memberAuthorization]], expected: "DB_NOT_FOUND" },
+    { selects: [[memberAuthorization]], returns: [], expected: "DB_NOT_FOUND" },
     {
       selects: [[{ ...ownerAuthorization, status: "archived" }]],
+      returns: [[{ id: "idem" }]],
       expected: "DB_PROJECT_ARCHIVED"
     },
-    { selects: [[ownerAuthorization], []], expected: "DB_NOT_FOUND" }
+    { selects: [[ownerAuthorization], []], returns: [[{ id: "idem" }]], expected: "DB_NOT_FOUND" }
   ];
   for (const item of cases) {
-    const database = createFakeDatabase({ selects: item.selects });
+    const database = createFakeDatabase({ selects: item.selects, returns: item.returns });
     await assert.rejects(
       new DrizzleProjectPolicyRepository(database).activatePolicy(
         {
@@ -560,4 +731,36 @@ test("member, archived, missing, and cross-project policy activation cannot muta
       false
     );
   }
+});
+
+test("idempotency snapshot parsing rejects internal fields, canonical payloads, and null snapshots", async () => {
+  const malformedProject = projectReplay();
+  malformedProject.responseSafeJson.internalId = projectId;
+  for (const responseSafeJson of [malformedProject.responseSafeJson, null]) {
+    const database = createFakeDatabase({
+      selects: [[ownerAuthorization], [{ ...malformedProject, responseSafeJson }]],
+      returns: [[]]
+    });
+    await assert.rejects(
+      new DrizzleProjectPolicyRepository(database).createProject(
+        projectInput,
+        idempotency("project_create")
+      ),
+      (error) => error.code === "DB_CONFLICT"
+    );
+  }
+
+  const malformedPolicy = policyReplay("policy_activate");
+  malformedPolicy.responseSafeJson.canonicalJson = canonicalJson;
+  const policyDatabase = createFakeDatabase({
+    selects: [[ownerAuthorization], [malformedPolicy]],
+    returns: [[]]
+  });
+  await assert.rejects(
+    new DrizzleProjectPolicyRepository(policyDatabase).activatePolicy(
+      { actorUserId: ownerUserId, projectPublicId, policyPublicId, activatedAt: updatedAt },
+      idempotency("policy_activate")
+    ),
+    (error) => error.code === "DB_CONFLICT"
+  );
 });

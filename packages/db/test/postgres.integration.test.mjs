@@ -65,7 +65,10 @@ test(
         "chain_transactions_replacement_scope_fk",
         "browser_sessions_wallet_user_fk",
         "wallet_auth_challenges_nonce_digest_unique",
-        "auth_rate_limits_scope_key_pk"
+        "auth_rate_limits_scope_key_pk",
+        "api_idempotency_response_complete",
+        "projects_default_branch_not_option",
+        "policies_source_relative"
       ];
       const constraintRows = await client`
         SELECT conname
@@ -171,6 +174,33 @@ test(
       );
       assert.equal(managedProject.publicId, managedProjectPublicId);
       assert.equal("id" in managedProject, false);
+      const projectUpdateAInput = {
+        actorUserId: userId,
+        projectPublicId: managedProjectPublicId,
+        changedAt: new Date("2026-07-17T08:30:00.000Z"),
+        name: "Repository update A"
+      };
+      const projectUpdateAIdempotency = idempotency(
+        "project_update",
+        "integration-project-update-a",
+        `0x${"f".repeat(64)}`
+      );
+      const projectUpdateA = await projectPolicyRepository.updateProject(
+        projectUpdateAInput,
+        projectUpdateAIdempotency
+      );
+      await projectPolicyRepository.updateProject(
+        {
+          ...projectUpdateAInput,
+          changedAt: new Date("2026-07-17T08:31:00.000Z"),
+          name: "Repository update B"
+        },
+        idempotency("project_update", "integration-project-update-b", `0x${"e".repeat(64)}`)
+      );
+      assert.deepEqual(
+        await projectPolicyRepository.updateProject(projectUpdateAInput, projectUpdateAIdempotency),
+        projectUpdateA
+      );
       assert.deepEqual(
         await projectPolicyRepository.createProject(managedProjectInput, projectCreateIdempotency),
         managedProject
@@ -183,6 +213,15 @@ test(
         await projectPolicyRepository.findProject(managedProjectPublicId, memberUserId),
         null
       );
+      const firstProjectPage = await projectPolicyRepository.listProjects(userId, { limit: 1 });
+      assert.equal(firstProjectPage.rows.length, 1);
+      assert(firstProjectPage.nextCursor);
+      const secondProjectPage = await projectPolicyRepository.listProjects(userId, {
+        limit: 1,
+        cursor: firstProjectPage.nextCursor
+      });
+      assert.equal(secondProjectPage.rows.length, 1);
+      assert.notEqual(secondProjectPage.rows[0].publicId, firstProjectPage.rows[0].publicId);
       await assert.rejects(
         projectPolicyRepository.createProject(
           { ...managedProjectInput, publicId: "01arz3ndektsv4rrffq69g5faq" },
@@ -217,6 +256,16 @@ test(
       );
       assert.equal(managedPolicy.active, true);
       assert.equal(managedPolicy.schemaVersion, 7);
+      const [policyReplayStorage] = await client`
+        SELECT response_status, response_safe_json
+        FROM api_idempotency_keys
+        WHERE actor_scope = ${`user:${userId}`}
+          AND operation = 'policy_create'
+          AND idempotency_key = 'integration-policy-create'
+      `;
+      assert.equal(policyReplayStorage.response_status, 201);
+      assert.equal("canonicalJson" in policyReplayStorage.response_safe_json, false);
+      assert.equal("id" in policyReplayStorage.response_safe_json, false);
       assert.deepEqual(
         (
           await projectPolicyRepository.findPolicyVersion(
@@ -231,13 +280,6 @@ test(
         (await projectPolicyRepository.findProject(managedProjectPublicId, userId))
           ?.activePolicyHash,
         managedPolicyHash
-      );
-      assert.deepEqual(
-        await projectPolicyRepository.createPolicyVersion(
-          managedPolicyInput,
-          policyCreateIdempotency
-        ),
-        managedPolicy
       );
       assert.equal(
         (
@@ -271,12 +313,78 @@ test(
         ),
         (error) => error.code === "DB_NOT_FOUND"
       );
+
+      const secondPolicyInput = {
+        ...managedPolicyInput,
+        policyPublicId: "01arz3ndektsv4rrffq69g5faw",
+        policyHash: `0x${"e".repeat(64)}`,
+        canonicalJson: {
+          ...managedPolicyInput.canonicalJson,
+          checks: [{ command: "pnpm", args: ["typecheck"], required: true }]
+        },
+        activatedAt: new Date("2026-07-17T09:00:01.000Z")
+      };
+      const secondPolicy = await projectPolicyRepository.createPolicyVersion(
+        secondPolicyInput,
+        idempotency("policy_create", "integration-policy-second", `0x${"0".repeat(64)}`)
+      );
+      assert.equal(secondPolicy.active, true);
+      assert.deepEqual(
+        await projectPolicyRepository.createPolicyVersion(
+          managedPolicyInput,
+          policyCreateIdempotency
+        ),
+        managedPolicy
+      );
+
+      const activateOriginalInput = {
+        actorUserId: userId,
+        projectPublicId: managedProjectPublicId,
+        policyPublicId: managedPolicyPublicId,
+        activatedAt: new Date("2026-07-17T09:00:02.000Z")
+      };
+      const activateOriginalIdempotency = idempotency(
+        "policy_activate",
+        "integration-policy-activate-original",
+        `0x${"6".repeat(64)}`
+      );
+      const activatedOriginal = await projectPolicyRepository.activatePolicy(
+        activateOriginalInput,
+        activateOriginalIdempotency
+      );
+      await projectPolicyRepository.activatePolicy(
+        {
+          ...activateOriginalInput,
+          policyPublicId: secondPolicyInput.policyPublicId,
+          activatedAt: new Date("2026-07-17T09:00:03.000Z")
+        },
+        idempotency(
+          "policy_activate",
+          "integration-policy-reactivate-second",
+          `0x${"7".repeat(64)}`
+        )
+      );
+      assert.deepEqual(
+        await projectPolicyRepository.activatePolicy(
+          activateOriginalInput,
+          activateOriginalIdempotency
+        ),
+        activatedOriginal
+      );
       const history = await projectPolicyRepository.listPolicyVersions(
         managedProjectPublicId,
-        userId
+        userId,
+        { limit: 1 }
       );
-      assert.equal(history?.length, 1);
-      assert.equal(history?.[0].active, true);
+      assert.equal(history?.rows.length, 1);
+      assert(history?.nextCursor);
+      const nextHistory = await projectPolicyRepository.listPolicyVersions(
+        managedProjectPublicId,
+        userId,
+        { limit: 1, cursor: history.nextCursor }
+      );
+      assert.equal(nextHistory?.rows.length, 1);
+      assert.notEqual(nextHistory?.rows[0].publicId, history.rows[0].publicId);
 
       const concurrentPolicyHash = `0x${"d".repeat(64)}`;
       const concurrentPolicyResults = await Promise.allSettled([
@@ -352,6 +460,13 @@ test(
         idempotency("project_update", "integration-project-archive", `0x${"8".repeat(64)}`)
       );
       assert.equal(archived.status, "archived");
+      assert.deepEqual(
+        await projectPolicyRepository.createPolicyVersion(
+          managedPolicyInput,
+          policyCreateIdempotency
+        ),
+        managedPolicy
+      );
       await assert.rejects(
         projectPolicyRepository.activatePolicy(
           {

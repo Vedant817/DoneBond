@@ -23,6 +23,8 @@ import {
   contractEvents,
   databaseSchema,
   evidenceBundles,
+  policies,
+  projects,
   taskChainStatus,
   taskOffchainStatus,
   tasks,
@@ -80,6 +82,9 @@ test("high-risk identities have database constraints", () => {
   );
   assert(constraintNames(contractEvents).has("contract_events_chain_tx_log_unique"));
   assert(constraintNames(apiIdempotencyKeys).has("api_idempotency_scope_operation_key_unique"));
+  assert(constraintNames(apiIdempotencyKeys).has("api_idempotency_response_complete"));
+  assert(constraintNames(projects).has("projects_default_branch_not_option"));
+  assert(constraintNames(policies).has("policies_source_relative"));
   assert(constraintNames(cliTokens).has("cli_tokens_digest_unique"));
   assert(constraintNames(walletAuthChallenges).has("wallet_auth_challenges_nonce_digest_unique"));
   assert(constraintNames(browserSessions).has("browser_sessions_token_digest_unique"));
@@ -112,5 +117,16 @@ test("migration history includes referential and normalization safeguards", asyn
   assert.match(sql, /auth_rate_limits_key_digest_format/);
   assert.match(sql, /auth_rate_limits_expiry_idx/);
   assert.match(sql, /"resource_public_id" varchar\(26\) NOT NULL/);
+  assert.match(sql, /"response_safe_json" jsonb/);
+  assert.match(sql, /"response_status" integer/);
+  assert.match(sql, /api_idempotency_response_complete/);
+  assert.match(sql, /projects_default_branch_not_option/);
+  assert.match(sql, /source_path" <> ''/);
+  assert.match(
+    sql,
+    /ALTER TABLE "projects" ALTER COLUMN "created_at" SET DATA TYPE timestamp \(3\) with time zone/
+  );
+  assert.equal(projects.createdAt.precision, 3);
+  assert.equal(policies.createdAt.precision, 3);
   assert.doesNotMatch(sql, /token_plaintext|private_key|mnemonic/i);
 });
