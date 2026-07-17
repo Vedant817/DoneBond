@@ -154,6 +154,7 @@ export const wallets = pgTable(
   },
   (table) => [
     unique("wallets_chain_address_unique").on(table.chainId, table.addressNormalized),
+    unique("wallets_id_user_unique").on(table.id, table.userId),
     index("wallets_user_idx").on(table.userId),
     check("wallets_chain_id_positive", sql`${table.chainId} > 0`),
     check(
@@ -163,6 +164,90 @@ export const wallets = pgTable(
     check(
       "wallets_address_nonzero",
       sql`${table.addressNormalized} <> '0x0000000000000000000000000000000000000000'`
+    )
+  ]
+);
+
+export const walletAuthChallenges = pgTable(
+  "wallet_auth_challenges",
+  {
+    id: uuid("id").primaryKey(),
+    addressNormalized: varchar("address_normalized", { length: 42 }).notNull(),
+    chainId: bigint("chain_id", { mode: "number" }).notNull(),
+    domain: varchar("domain", { length: 255 }).notNull(),
+    uri: text("uri").notNull(),
+    nonceDigest: varchar("nonce_digest", { length: 64 }).notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true })
+  },
+  (table) => [
+    unique("wallet_auth_challenges_nonce_digest_unique").on(table.nonceDigest),
+    index("wallet_auth_challenges_expiry_idx").on(table.expiresAt, table.consumedAt),
+    index("wallet_auth_challenges_address_issued_idx").on(
+      table.chainId,
+      table.addressNormalized,
+      table.issuedAt
+    ),
+    check(
+      "wallet_auth_challenges_address_format",
+      sql`${table.addressNormalized} ~ '^0x[0-9a-f]{40}$' and ${table.addressNormalized} <> '0x0000000000000000000000000000000000000000'`
+    ),
+    check("wallet_auth_challenges_supported_chain", sql`${table.chainId} in (143, 10143)`),
+    check(
+      "wallet_auth_challenges_nonce_digest_format",
+      sql`${table.nonceDigest} ~ '^[0-9a-f]{64}$'`
+    ),
+    check(
+      "wallet_auth_challenges_lifetime",
+      sql`${table.expiresAt} > ${table.issuedAt} and (${table.consumedAt} is null or (${table.consumedAt} >= ${table.issuedAt} and ${table.consumedAt} < ${table.expiresAt}))`
+    ),
+    check(
+      "wallet_auth_challenges_origin_binding",
+      sql`${table.domain} !~ '[/@?#]' and (${table.uri} = 'https://' || ${table.domain} or (${table.domain} ~ '^(localhost|127\\.0\\.0\\.1)(?::[0-9]+)?$' and ${table.uri} = 'http://' || ${table.domain}))`
+    )
+  ]
+);
+
+export const browserSessions = pgTable(
+  "browser_sessions",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    walletId: uuid("wallet_id").notNull(),
+    tokenDigest: varchar("token_digest", { length: 64 }).notNull(),
+    csrfDigest: varchar("csrf_digest", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    absoluteExpiresAt: timestamp("absolute_expires_at", { withTimezone: true }).notNull(),
+    idleExpiresAt: timestamp("idle_expires_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    rotatedFromSessionId: uuid("rotated_from_session_id").references(
+      (): AnyPgColumn => browserSessions.id,
+      { onDelete: "set null" }
+    )
+  },
+  (table) => [
+    unique("browser_sessions_token_digest_unique").on(table.tokenDigest),
+    unique("browser_sessions_csrf_digest_unique").on(table.csrfDigest),
+    foreignKey({
+      columns: [table.walletId, table.userId],
+      foreignColumns: [wallets.id, wallets.userId],
+      name: "browser_sessions_wallet_user_fk"
+    }).onDelete("cascade"),
+    index("browser_sessions_user_active_idx").on(
+      table.userId,
+      table.revokedAt,
+      table.idleExpiresAt
+    ),
+    index("browser_sessions_absolute_expiry_idx").on(table.absoluteExpiresAt),
+    check("browser_sessions_token_digest_format", sql`${table.tokenDigest} ~ '^[0-9a-f]{64}$'`),
+    check("browser_sessions_csrf_digest_format", sql`${table.csrfDigest} ~ '^[0-9a-f]{64}$'`),
+    check(
+      "browser_sessions_lifetime",
+      sql`${table.absoluteExpiresAt} > ${table.createdAt} and ${table.idleExpiresAt} > ${table.createdAt} and ${table.idleExpiresAt} <= ${table.absoluteExpiresAt} and ${table.lastSeenAt} >= ${table.createdAt} and ${table.lastSeenAt} < ${table.absoluteExpiresAt} and (${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt})`
     )
   ]
 );
@@ -602,6 +687,7 @@ export const apiIdempotencyKeys = pgTable(
 export const databaseSchema = {
   apiIdempotencyKeys,
   auditEvents,
+  browserSessions,
   chainTransactions,
   cliTokens,
   contractEvents,
@@ -612,5 +698,6 @@ export const databaseSchema = {
   tasks,
   users,
   verificationChecks,
+  walletAuthChallenges,
   wallets
 };

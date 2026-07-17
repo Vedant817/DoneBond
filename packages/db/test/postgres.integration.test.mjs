@@ -6,7 +6,14 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
-import { buildPostgresOptions, parseDatabaseEnvironment } from "../dist/index.js";
+import {
+  buildPostgresOptions,
+  databaseSchema,
+  DrizzleBrowserSessionStore,
+  DrizzleWalletAccountResolver,
+  DrizzleWalletChallengeStore,
+  parseDatabaseEnvironment
+} from "../dist/index.js";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
@@ -35,7 +42,8 @@ test(
     const client = postgres(testDatabaseUrl, buildPostgresOptions(environment));
     try {
       await client.unsafe("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public");
-      await migrate(drizzle(client), {
+      const database = drizzle(client, { schema: databaseSchema });
+      await migrate(database, {
         migrationsFolder: fileURLToPath(new URL("../migrations", import.meta.url))
       });
 
@@ -44,13 +52,15 @@ test(
         FROM information_schema.tables
         WHERE table_schema = 'public'
       `;
-      assert.equal(tableCount, 13);
+      assert.equal(tableCount, 15);
 
       const requiredConstraints = [
         "tasks_policy_same_project_hash_fk",
         "evidence_task_policy_project_fk",
         "evidence_token_project_fk",
-        "chain_transactions_replacement_scope_fk"
+        "chain_transactions_replacement_scope_fk",
+        "browser_sessions_wallet_user_fk",
+        "wallet_auth_challenges_nonce_digest_unique"
       ];
       const constraintRows = await client`
         SELECT conname
@@ -80,6 +90,65 @@ test(
           )
         `,
         /cli_tokens_digest_format/
+      );
+
+      const testOnlyAddress = `0x${"3".repeat(40)}`;
+      const accounts = new DrizzleWalletAccountResolver(database);
+      const [firstAccount, concurrentAccount] = await Promise.all([
+        accounts.findOrCreateVerifiedWallet(testOnlyAddress, 10_143),
+        accounts.findOrCreateVerifiedWallet(testOnlyAddress, 10_143)
+      ]);
+      assert.equal(firstAccount.userId, concurrentAccount.userId);
+
+      const challenges = new DrizzleWalletChallengeStore(database);
+      const challengeId = "00000000-0000-4000-8000-000000000301";
+      const testOnlyNonceDigest = "d".repeat(64);
+      const issuedAt = new Date("2026-07-17T08:00:00.000Z");
+      await challenges.create({
+        id: challengeId,
+        address: testOnlyAddress,
+        chainId: 10_143,
+        domain: "example.test",
+        uri: "https://example.test",
+        nonceDigest: testOnlyNonceDigest,
+        issuedAt,
+        expiresAt: new Date("2026-07-17T08:05:00.000Z")
+      });
+      const consumedAt = new Date("2026-07-17T08:01:00.000Z");
+      const consumeResults = await Promise.all([
+        challenges.consume(challengeId, testOnlyNonceDigest, consumedAt),
+        challenges.consume(challengeId, testOnlyNonceDigest, consumedAt)
+      ]);
+      assert.deepEqual(consumeResults.sort(), [false, true]);
+
+      const sessions = new DrizzleBrowserSessionStore(database);
+      const testOnlySessionDigest = "e".repeat(64);
+      const testOnlyCsrfDigest = "f".repeat(64);
+      const absoluteExpiresAt = new Date("2026-07-17T08:30:00.000Z");
+      await sessions.create({
+        id: "00000000-0000-4000-8000-000000000302",
+        ...firstAccount,
+        tokenDigest: testOnlySessionDigest,
+        csrfDigest: testOnlyCsrfDigest,
+        createdAt: issuedAt,
+        absoluteExpiresAt,
+        idleExpiresAt: new Date("2026-07-17T08:20:00.000Z")
+      });
+      const active = await sessions.findActiveByTokenDigest(
+        testOnlySessionDigest,
+        new Date("2026-07-17T08:10:00.000Z")
+      );
+      assert.equal(active?.idleExpiresAt.getTime(), absoluteExpiresAt.getTime());
+      assert.equal(
+        await sessions.revoke(testOnlySessionDigest, new Date("2026-07-17T08:11:00.000Z")),
+        true
+      );
+      assert.equal(
+        await sessions.findActiveByTokenDigest(
+          testOnlySessionDigest,
+          new Date("2026-07-17T08:12:00.000Z")
+        ),
+        null
       );
     } finally {
       await client.unsafe("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public");

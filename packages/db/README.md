@@ -67,6 +67,14 @@ create a new migration instead.
 - Database TLS uses certificate verification. `DATABASE_SSL=disable` is rejected
   unless the database hostname is loopback; `DATABASE_CA_CERT` can provide a
   private CA bundle without weakening `rejectUnauthorized`.
+- Wallet sign-in challenges persist only a SHA-256 nonce digest and bind it to the
+  normalized wallet, supported chain, application domain, URI, and strict expiry.
+  Consumption is a single conditional update, so concurrent signature replays
+  cannot both succeed.
+- Browser sessions persist only keyed token and CSRF digests. Active lookup is an
+  atomic conditional idle-extension capped by absolute expiry; revoked, idle-
+  expired, and absolute-expired sessions cannot be revived. Session rows bind a
+  wallet and user with a composite foreign key.
 
 No success-state fixtures are seeded. Tests create their own records and must
 destroy them after use.

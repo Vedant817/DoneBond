@@ -13,6 +13,7 @@ import {
 
 import {
   apiIdempotencyKeys,
+  browserSessions,
   chainIntentType,
   chainTransactionStatus,
   checkStatus,
@@ -24,6 +25,7 @@ import {
   taskChainStatus,
   taskOffchainStatus,
   tasks,
+  walletAuthChallenges,
   wallets
 } from "../dist/schema.js";
 
@@ -33,6 +35,7 @@ test("schema exposes every MVP entity", () => {
   assert.deepEqual(Object.keys(databaseSchema).sort(), [
     "apiIdempotencyKeys",
     "auditEvents",
+    "browserSessions",
     "chainTransactions",
     "cliTokens",
     "contractEvents",
@@ -43,6 +46,7 @@ test("schema exposes every MVP entity", () => {
     "tasks",
     "users",
     "verificationChecks",
+    "walletAuthChallenges",
     "wallets"
   ]);
 });
@@ -74,13 +78,18 @@ test("high-risk identities have database constraints", () => {
   assert(constraintNames(contractEvents).has("contract_events_chain_tx_log_unique"));
   assert(constraintNames(apiIdempotencyKeys).has("api_idempotency_scope_operation_key_unique"));
   assert(constraintNames(cliTokens).has("cli_tokens_digest_unique"));
+  assert(constraintNames(walletAuthChallenges).has("wallet_auth_challenges_nonce_digest_unique"));
+  assert(constraintNames(browserSessions).has("browser_sessions_token_digest_unique"));
 });
 
-test("initial migration includes referential and normalization safeguards", async () => {
+test("migration history includes referential and normalization safeguards", async () => {
   const migrationNames = (await readdir(migrationsUrl)).filter((name) => name.endsWith(".sql"));
-  assert.equal(migrationNames.length, 1);
-  const migrationUrl = new URL(migrationNames[0], migrationsUrl);
-  const sql = await readFile(migrationUrl, "utf8");
+  assert(migrationNames.length >= 1);
+  const sql = (
+    await Promise.all(
+      migrationNames.sort().map((name) => readFile(new URL(name, migrationsUrl), "utf8"))
+    )
+  ).join("\n");
   assert.match(sql, /projects_active_policy_same_project_fk/);
   assert.match(sql, /tasks_policy_same_project_hash_fk/);
   assert.match(sql, /evidence_task_policy_project_fk/);
@@ -93,6 +102,9 @@ test("initial migration includes referential and normalization safeguards", asyn
   assert.match(sql, /evidence_token_idempotency_unique/);
   assert.match(sql, /evidence_request_hash_format/);
   assert.match(sql, /cli_tokens_digest_format/);
+  assert.match(sql, /browser_sessions_wallet_user_fk/);
+  assert.match(sql, /browser_sessions_token_digest_format/);
+  assert.match(sql, /wallet_auth_challenges_nonce_digest_format/);
   assert.match(sql, /"resource_public_id" varchar\(26\) NOT NULL/);
   assert.doesNotMatch(sql, /token_plaintext|private_key|mnemonic/i);
 });
