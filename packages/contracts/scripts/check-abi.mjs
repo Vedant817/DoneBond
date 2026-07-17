@@ -8,11 +8,11 @@ const committed = JSON.parse(
   readFileSync(new URL("../abi/DoneBondRegistry.json", import.meta.url), "utf8")
 );
 const generated = JSON.parse(
-  execFileSync(
-    "forge",
-    ["inspect", "src/DoneBondRegistry.sol:DoneBondRegistry", "abi", "--json"],
-    { cwd: packageRoot, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }
-  )
+  execFileSync("forge", ["inspect", "src/DoneBondRegistry.sol:DoneBondRegistry", "abi", "--json"], {
+    cwd: packageRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"]
+  })
 );
 
 assert.deepEqual(
