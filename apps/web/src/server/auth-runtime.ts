@@ -2,10 +2,12 @@ import {
   createDatabase,
   createWalletAuthAdapters,
   DoneBondRepository,
-  DrizzleAuthRateLimiter
+  DrizzleAuthRateLimiter,
+  DrizzleCliTokenRepository
 } from "@donebond/db";
 
 import { createAuthHandlers, type RequestRateLimiter } from "./auth-handlers.ts";
+import { validateCliTokenSecret } from "./cli-token.ts";
 import { correlationId, errorResponse } from "./http.ts";
 import { WalletAuthService } from "./wallet-auth.ts";
 
@@ -13,6 +15,15 @@ let handlers: ReturnType<typeof createAuthHandlers> | undefined;
 let databaseHandle: ReturnType<typeof createDatabase> | undefined;
 let walletAuthService: WalletAuthService | undefined;
 let projectRepository: DoneBondRepository | undefined;
+let cliTokenRepository: DrizzleCliTokenRepository | undefined;
+let cliTokenGlobalLimiter: RequestRateLimiter | undefined;
+let cliTokenSubjectLimiter: RequestRateLimiter | undefined;
+let cliTokenCreateGlobalLimiter: RequestRateLimiter | undefined;
+let cliTokenCreateSubjectLimiter: RequestRateLimiter | undefined;
+let cliTokenRevokeGlobalLimiter: RequestRateLimiter | undefined;
+let cliTokenRevokeSubjectLimiter: RequestRateLimiter | undefined;
+let runtimeApplicationOrigin: string | undefined;
+let runtimeCliTokenSecret: string | undefined;
 
 type AuthHandler = keyof ReturnType<typeof createAuthHandlers>;
 
@@ -54,6 +65,11 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
       "NEXT_PUBLIC_APP_URL and AUTH_SECRET are required for wallet authentication"
     );
   }
+  const cliTokenSecret = process.env.CLI_TOKEN_SECRET;
+  if (cliTokenSecret === undefined) {
+    throw new TypeError("CLI_TOKEN_SECRET is required for CLI authentication");
+  }
+  validateCliTokenSecret(cliTokenSecret);
   const canonicalOrigin = configuredApplicationOrigin(applicationOrigin);
   databaseHandle = createDatabase();
   const adapters = createWalletAuthAdapters(databaseHandle.db);
@@ -66,6 +82,51 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
   });
   walletAuthService = auth;
   projectRepository = new DoneBondRepository(databaseHandle.db);
+  cliTokenRepository = new DrizzleCliTokenRepository(databaseHandle.db);
+  runtimeApplicationOrigin = canonicalOrigin;
+  runtimeCliTokenSecret = cliTokenSecret;
+  cliTokenGlobalLimiter = maintainedLimiter(
+    new DrizzleAuthRateLimiter(databaseHandle.db, {
+      scope: "cli_auth_global",
+      maxAttempts: 1200,
+      windowMs: 10 * 60 * 1000
+    })
+  );
+  cliTokenSubjectLimiter = maintainedLimiter(
+    new DrizzleAuthRateLimiter(databaseHandle.db, {
+      scope: "cli_auth_token",
+      maxAttempts: 120,
+      windowMs: 10 * 60 * 1000
+    })
+  );
+  cliTokenCreateGlobalLimiter = maintainedLimiter(
+    new DrizzleAuthRateLimiter(databaseHandle.db, {
+      scope: "cli_create_global",
+      maxAttempts: 300,
+      windowMs: 10 * 60 * 1000
+    })
+  );
+  cliTokenCreateSubjectLimiter = maintainedLimiter(
+    new DrizzleAuthRateLimiter(databaseHandle.db, {
+      scope: "cli_create_project",
+      maxAttempts: 30,
+      windowMs: 10 * 60 * 1000
+    })
+  );
+  cliTokenRevokeGlobalLimiter = maintainedLimiter(
+    new DrizzleAuthRateLimiter(databaseHandle.db, {
+      scope: "cli_revoke_global",
+      maxAttempts: 1200,
+      windowMs: 10 * 60 * 1000
+    })
+  );
+  cliTokenRevokeSubjectLimiter = maintainedLimiter(
+    new DrizzleAuthRateLimiter(databaseHandle.db, {
+      scope: "cli_revoke_project",
+      maxAttempts: 300,
+      windowMs: 10 * 60 * 1000
+    })
+  );
   handlers = createAuthHandlers({
     applicationOrigin: canonicalOrigin,
     auth,
@@ -99,6 +160,50 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
     )
   });
   return handlers;
+}
+
+export function getCliTokenServices(): {
+  readonly applicationOrigin: string;
+  readonly tokenSecret: string;
+  readonly auth: WalletAuthService;
+  readonly accessStore: DoneBondRepository;
+  readonly tokenRepository: DrizzleCliTokenRepository;
+  readonly globalLimiter: RequestRateLimiter;
+  readonly tokenLimiter: RequestRateLimiter;
+  readonly createGlobalLimiter: RequestRateLimiter;
+  readonly createSubjectLimiter: RequestRateLimiter;
+  readonly revokeGlobalLimiter: RequestRateLimiter;
+  readonly revokeSubjectLimiter: RequestRateLimiter;
+} {
+  getAuthHandlers();
+  if (
+    runtimeApplicationOrigin === undefined ||
+    runtimeCliTokenSecret === undefined ||
+    walletAuthService === undefined ||
+    projectRepository === undefined ||
+    cliTokenRepository === undefined ||
+    cliTokenGlobalLimiter === undefined ||
+    cliTokenSubjectLimiter === undefined ||
+    cliTokenCreateGlobalLimiter === undefined ||
+    cliTokenCreateSubjectLimiter === undefined ||
+    cliTokenRevokeGlobalLimiter === undefined ||
+    cliTokenRevokeSubjectLimiter === undefined
+  ) {
+    throw new TypeError("CLI token services failed to initialize");
+  }
+  return {
+    applicationOrigin: runtimeApplicationOrigin,
+    tokenSecret: runtimeCliTokenSecret,
+    auth: walletAuthService,
+    accessStore: projectRepository,
+    tokenRepository: cliTokenRepository,
+    globalLimiter: cliTokenGlobalLimiter,
+    tokenLimiter: cliTokenSubjectLimiter,
+    createGlobalLimiter: cliTokenCreateGlobalLimiter,
+    createSubjectLimiter: cliTokenCreateSubjectLimiter,
+    revokeGlobalLimiter: cliTokenRevokeGlobalLimiter,
+    revokeSubjectLimiter: cliTokenRevokeSubjectLimiter
+  };
 }
 
 export function getProjectAuthorizationServices(): {

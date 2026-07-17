@@ -5,7 +5,7 @@
 - Prefix MVP routes with `/api/v1`.
 - Validate every body, query, and path parameter with shared schemas.
 - Return stable machine-readable error codes.
-- Require an `Idempotency-Key` for task creation, evidence upload, and transaction registration.
+- Require an `Idempotency-Key` for CLI-token creation, task creation, evidence upload, and transaction registration.
 - Use cursor pagination for lists.
 - Never expose internal database IDs where a public opaque ID is available.
 
@@ -32,7 +32,21 @@ are persisted; invalid CSRF attempts do not renew idle session lifetime.
 
 ### CLI
 
-Use a randomly generated project-scoped token. Store only a strong hash of the token server-side. The token is displayed once, can be revoked, has a last-used timestamp, and cannot manage billing or organization settings.
+Use a high-entropy project-scoped bearer token. The creation credential and opaque
+public ID are deterministically derived from an independent server secret plus the
+authenticated user, project, and idempotency key so an exact network retry returns
+the same copy-once response without storing recoverable plaintext. Persist only a
+domain-separated HMAC-SHA-256 digest and a safe display prefix. Tokens can be
+revoked, update `last_used_at` atomically only when active and project-bound, and
+cannot manage unrelated projects or owner-only browser settings.
+
+Token creation and revocation require an owner browser session, the exact trusted
+`Origin`, CSRF proof, and durable PostgreSQL global plus owner/project rate limits.
+Creation requires an empty JSON object and a 16–128 character `Idempotency-Key`.
+Creation and revocation have separate quotas so creation abuse cannot prevent
+emergency revocation. CLI bearer authentication has separate global and token
+limits; malformed credentials consume the global quota before parsing. Token,
+cookie, and CSRF headers must be redacted before any structured request logging.
 
 ## Core endpoints
 

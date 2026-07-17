@@ -239,11 +239,11 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 4.3 CLI tokens
 
-- [ ] Generate cryptographically secure project-scoped tokens.
-- [ ] Show plaintext once.
-- [ ] Store only a slow/strong hash or keyed digest appropriate for high-entropy tokens.
-- [ ] Implement revocation, last-used timestamp, and rate limiting.
-- [ ] Add log redaction for token headers.
+- [x] Generate cryptographically secure project-scoped tokens.
+- [x] Show plaintext once.
+- [x] Store only a slow/strong hash or keyed digest appropriate for high-entropy tokens.
+- [x] Implement revocation, last-used timestamp, and rate limiting.
+- [x] Add log redaction for token headers.
 
 ## 4.4 Projects and policies API
 
@@ -751,3 +751,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Unauthorized and nonexistent projects share `PROJECT_NOT_FOUND`; only an authenticated member can receive `AUTH_FORBIDDEN` when attempting an owner-only operation. The read model returns only public ID and role, never internal UUIDs or repository metadata.
 - Remaining risks/blockers: The public-endpoint allowlist child item remains open until the receipt API is implemented. Real PostgreSQL authorization and cascade behavior remain guarded by the unavailable disposable database.
 - Commit: DB read model `4a845aa`; aligned web/service integration `8af4f7089a92f42ebc138ea6a8ffc8d20f777d27`.
+
+## 2026-07-17 13:25 IST — Database engineer + Codex/integrator + independent security reviewer — 4.3
+- Branch/worktree: persistence on `feat/cli-token-persistence`, integrated and API-wired on `main`; independent read-only adversarial review.
+- Summary: Implemented owner-managed, project-scoped CLI credentials with canonical secret validation, copy-once responses, HMAC-SHA-256 digest-only persistence, atomic project-bound authentication/last-use, idempotent audited revocation, exact retry-safe credential derivation, strict origin/CSRF/body/idempotency validation, stable errors, credential-header redaction, and distinct durable PostgreSQL quotas for bearer authentication, creation, and emergency revocation.
+- Files changed: `packages/db` CLI-token repository/tests from the specialist integration; `apps/web` credential codec/authenticator, owner handlers, runtime adapters, dynamic API routes, tests, and project-authorization reuse; `.env.example`, `API_AND_SCHEMA.md`, dependency overrides/lockfile, manifest, and tracker.
+- Verification commands: DB test/typecheck/build; web test/typecheck/production build; root format/lint/boundaries/typecheck/test/build; dependency audit; history secret scan; `git diff --check`; independent retry, rate-limit, derivation-domain, and plaintext-persistence probes.
+- Results: Web passed 33/33; DB passed 42 deterministic tests with only the guarded real-PostgreSQL migration test skipped; all root quality/test/build gates passed; production build exposes both CLI-token routes as dynamic Node routes; dependency audit reports no known vulnerabilities after the narrow patched `esbuild` override. Independent re-review reproduced the initial non-idempotent retry and missing management-limit findings, verified both remediations, and reports no remaining critical/high/medium finding.
+- Security/privacy notes: The independent CLI secret is canonical unpadded base64url with at least 32 decoded bytes. Credential material, public IDs, stored digests, and rate keys use separate HMAC domains. Plaintext never enters repository, idempotency, audit, or safe-header data. Global rate limits execute before attacker-controlled subject keys; owner/project subject limits execute only after authorization. Creation and revocation quotas are separated so creation traffic cannot consume emergency-revocation capacity.
+- Remaining risks/blockers: Actual PostgreSQL migration/concurrency execution remains blocked by the unavailable disposable database. Deployment should add edge/IP abuse controls; fixed-window `429` responses do not yet include `Retry-After`. Token-management UI remains task 6.3. Public endpoint field allowlisting remains task 4.2/4.7.
+- Commit: pending this verified integration commit; DB persistence integration `2171c40`.

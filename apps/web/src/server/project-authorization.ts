@@ -19,17 +19,15 @@ export interface SessionAuthenticator {
   authenticate(cookieHeader: string | null): Promise<AuthenticatedSession>;
 }
 
-export async function requireProjectAccess(
-  authenticator: SessionAuthenticator,
+export async function authorizeProjectSession(
   accessStore: ProjectAccessStore,
-  cookieHeader: string | null,
+  session: AuthenticatedSession,
   projectPublicIdInput: string,
   requiredRole: ProjectRole = "member"
-): Promise<{ session: AuthenticatedSession; access: ProjectAccess }> {
+): Promise<ProjectAccess> {
   if (requiredRole !== "member" && requiredRole !== "owner") {
     throw new HttpError(ERROR_CODES.AUTH_FORBIDDEN, "Project access requirement is invalid", 403);
   }
-  const session = await authenticator.authenticate(cookieHeader);
   let projectPublicId: string;
   try {
     projectPublicId = PublicIdentifierSchema.parse(projectPublicIdInput);
@@ -44,5 +42,22 @@ export async function requireProjectAccess(
   if (requiredRole === "owner" && access.role !== "owner") {
     throw new HttpError(ERROR_CODES.AUTH_FORBIDDEN, "Project owner access is required", 403);
   }
+  return access;
+}
+
+export async function requireProjectAccess(
+  authenticator: SessionAuthenticator,
+  accessStore: ProjectAccessStore,
+  cookieHeader: string | null,
+  projectPublicIdInput: string,
+  requiredRole: ProjectRole = "member"
+): Promise<{ session: AuthenticatedSession; access: ProjectAccess }> {
+  const session = await authenticator.authenticate(cookieHeader);
+  const access = await authorizeProjectSession(
+    accessStore,
+    session,
+    projectPublicIdInput,
+    requiredRole
+  );
   return { session, access };
 }
