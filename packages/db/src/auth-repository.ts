@@ -248,8 +248,34 @@ export class DrizzleBrowserSessionStore {
     tokenDigest: string,
     accessedAt: Date
   ): Promise<StoredBrowserSessionRecord | null> {
+    return this.findAndAdvanceActiveSession(tokenDigest, accessedAt);
+  }
+
+  public async findActiveByTokenAndCsrfDigest(
+    tokenDigest: string,
+    csrfDigest: string,
+    accessedAt: Date
+  ): Promise<StoredBrowserSessionRecord | null> {
+    assertDigest(csrfDigest, "Session CSRF digest");
+    return this.findAndAdvanceActiveSession(tokenDigest, accessedAt, csrfDigest);
+  }
+
+  private async findAndAdvanceActiveSession(
+    tokenDigest: string,
+    accessedAt: Date,
+    csrfDigest?: string
+  ): Promise<StoredBrowserSessionRecord | null> {
     assertDigest(tokenDigest, "Session token digest");
     const requestedIdleExpiry = new Date(accessedAt.getTime() + this.idleTtlMs);
+    const activeSessionPredicates = [
+      eq(browserSessions.tokenDigest, tokenDigest),
+      isNull(browserSessions.revokedAt),
+      gt(browserSessions.absoluteExpiresAt, accessedAt),
+      gt(browserSessions.idleExpiresAt, accessedAt)
+    ];
+    if (csrfDigest !== undefined) {
+      activeSessionPredicates.push(eq(browserSessions.csrfDigest, csrfDigest));
+    }
     try {
       return await this.database.transaction(async (transaction) => {
         const [session] = await transaction
@@ -258,14 +284,7 @@ export class DrizzleBrowserSessionStore {
             lastSeenAt: sql`greatest(${browserSessions.lastSeenAt}, ${accessedAt})`,
             idleExpiresAt: sql`least(${browserSessions.absoluteExpiresAt}, greatest(${browserSessions.idleExpiresAt}, ${requestedIdleExpiry}))`
           })
-          .where(
-            and(
-              eq(browserSessions.tokenDigest, tokenDigest),
-              isNull(browserSessions.revokedAt),
-              gt(browserSessions.absoluteExpiresAt, accessedAt),
-              gt(browserSessions.idleExpiresAt, accessedAt)
-            )
-          )
+          .where(and(...activeSessionPredicates))
           .returning();
         if (!session) return null;
         const [wallet] = await transaction

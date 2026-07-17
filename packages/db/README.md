@@ -74,7 +74,8 @@ create a new migration instead.
 - Browser sessions persist only keyed token and CSRF digests. Active lookup is an
   atomic conditional idle-extension capped by absolute expiry; revoked, idle-
   expired, and absolute-expired sessions cannot be revived. Session rows bind a
-  wallet and user with a composite foreign key.
+  wallet and user with a composite foreign key. CSRF-protected lookups include
+  both digests in that conditional update, so invalid CSRF cannot extend a session.
 
 No success-state fixtures are seeded. Tests create their own records and must
 destroy them after use.

@@ -28,7 +28,8 @@ function createFakeDatabase({ selects = [], returns = [] } = {}) {
       onConflictDoNothing() {
         return builder;
       },
-      where() {
+      where(condition) {
+        call.where = condition;
         return builder;
       },
       returning() {
@@ -151,6 +152,36 @@ test("active session lookup atomically advances idle time and rejects no-row CAS
     null
   );
   assert.equal(expiredDatabase.calls.filter((call) => call.kind === "select").length, 0);
+});
+
+test("CSRF session lookup requires both digests before advancing idle time", async () => {
+  const accessedAt = new Date("2026-07-17T08:30:00.000Z");
+  const database = createFakeDatabase({ returns: [[]] });
+  const active = await new DrizzleBrowserSessionStore(database).findActiveByTokenAndCsrfDigest(
+    digest,
+    otherDigest,
+    accessedAt
+  );
+  assert.equal(active, null);
+  const update = database.calls.find(
+    (call) => call.kind === "update" && call.table === browserSessions
+  );
+  assert(update);
+  assert.equal(database.calls.filter((call) => call.kind === "select").length, 0);
+
+  const referencedColumns = new Set();
+  const visited = new Set();
+  const inspectSql = (value) => {
+    if (value === null || typeof value !== "object" || visited.has(value)) return;
+    visited.add(value);
+    if (typeof value.name === "string" && value.table === browserSessions) {
+      referencedColumns.add(value.name);
+    }
+    for (const child of Object.values(value)) inspectSql(child);
+  };
+  inspectSql(update.where);
+  assert(referencedColumns.has("token_digest"));
+  assert(referencedColumns.has("csrf_digest"));
 });
 
 test("session creation rejects a wallet owned by another user", async () => {

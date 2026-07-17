@@ -134,8 +134,29 @@ test(
         absoluteExpiresAt,
         idleExpiresAt: new Date("2026-07-17T08:20:00.000Z")
       });
-      const active = await sessions.findActiveByTokenDigest(
+      const [beforeInvalidCsrf] = await client`
+        SELECT last_seen_at, idle_expires_at
+        FROM browser_sessions
+        WHERE token_digest = ${testOnlySessionDigest}
+      `;
+      assert.equal(
+        await sessions.findActiveByTokenAndCsrfDigest(
+          testOnlySessionDigest,
+          "0".repeat(64),
+          new Date("2026-07-17T08:10:00.000Z")
+        ),
+        null
+      );
+      const [afterInvalidCsrf] = await client`
+        SELECT last_seen_at, idle_expires_at
+        FROM browser_sessions
+        WHERE token_digest = ${testOnlySessionDigest}
+      `;
+      assert.deepEqual(afterInvalidCsrf, beforeInvalidCsrf);
+
+      const active = await sessions.findActiveByTokenAndCsrfDigest(
         testOnlySessionDigest,
+        testOnlyCsrfDigest,
         new Date("2026-07-17T08:10:00.000Z")
       );
       assert.equal(active?.idleExpiresAt.getTime(), absoluteExpiresAt.getTime());
