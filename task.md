@@ -664,10 +664,10 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 
 ## 2026-07-17 10:33 IST — Codex/release integrator — 3.5 (partial)
 - Branch/worktree: `main`.
-- Summary: Reconfirmed current official Monad Testnet chain ID, public RPC, explorer, and native token; synchronized safe public defaults and the deployment runbook.
-- Files changed: `.env.example`, `DEPLOYMENT.md`, manifest, and tracker.
-- Verification commands: Official Monad Developer Portal/documentation lookup; attempted `cast chain-id`, `cast block-number`, and explorer HEAD preflight.
-- Results: Official primary sources report chain ID `10143`, RPC `https://rpc.testnet.monad.xyz`, explorer `https://testnet.monadscan.com`, and native `MON`. Shell preflight could not resolve external DNS in this execution environment, so no transaction or live RPC result is claimed.
+- Summary: Reconfirmed current official Monad Testnet chain ID, public RPC, explorer, and native token; synchronized safe public defaults and the deployment runbook; versioned the reviewed registry ABI with a deterministic source-drift check.
+- Files changed: `.env.example`, `DEPLOYMENT.md`, `packages/contracts/abi/DoneBondRegistry.json`, contract ABI check/export metadata, manifest, and tracker.
+- Verification commands: Official Monad Developer Portal/documentation lookup; attempted `cast chain-id`, `cast block-number`, and explorer HEAD preflight; `pnpm abi:check`; focused shared EIP-712 vector test.
+- Results: Official primary sources report chain ID `10143`, RPC `https://rpc.testnet.monad.xyz`, explorer `https://testnet.monadscan.com`, and native `MON`. Committed ABI exactly matches pinned Solidity output and the fixed vector passes. Shell preflight could not resolve external DNS in this execution environment, so no transaction or live RPC result is claimed.
 - Security/privacy notes: No deployer/verifier key, wallet address, or credential was added. Explorer API credentials remain blank.
 - Remaining risks/blockers: Deployment, source verification, and live create/submit/approve/withdraw require a dedicated funded Testnet wallet, verifier key/address, working outbound RPC DNS, and explorer verification access.
-- Commit: pending (this changeset).
+- Commit: network configuration `e526f713ed02c73a3abc86e6415874bbffa62209`; ABI versioning pending in this changeset.

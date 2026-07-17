@@ -27,7 +27,12 @@ forge build
 forge test -vvv
 forge test --gas-report
 forge coverage --report summary
+pnpm abi:check
 ```
+
+The reviewed ABI is committed at `abi/DoneBondRegistry.json`. `abi:check` derives
+the ABI from the pinned compiler and fails when the committed integration artifact
+drifts from Solidity source.
 
 The registry intentionally uses `block.timestamp` only for user-selected task deadlines and short-lived
 verifier attestations. Validators can skew timestamps slightly, so callers should not use deadlines whose
