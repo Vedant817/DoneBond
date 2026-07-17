@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildPostgresOptions,
   DatabaseServiceError,
   parseDatabaseEnvironment,
   translateDatabaseError
@@ -26,6 +27,21 @@ test("database environment fails closed and defaults to TLS", () => {
       }),
     /loopback/
   );
+});
+
+test("TLS configuration is certificate-verified and supports a private CA", () => {
+  const environment = parseDatabaseEnvironment({
+    DATABASE_URL: "postgresql://db.example.test/donebond",
+    DATABASE_CA_CERT: "test-private-ca"
+  });
+  const options = buildPostgresOptions(environment);
+  assert.deepEqual(options.ssl, { ca: "test-private-ca", rejectUnauthorized: true });
+
+  const local = parseDatabaseEnvironment({
+    DATABASE_URL: "postgresql://127.0.0.1/donebond",
+    DATABASE_SSL: "disable"
+  });
+  assert.equal(buildPostgresOptions(local).ssl, false);
 });
 
 test("unique violations become stable errors without leaking constraint details", () => {

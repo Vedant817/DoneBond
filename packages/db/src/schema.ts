@@ -31,17 +31,61 @@ function policyProjectIdColumn(): AnyPgColumn {
   return policies.projectId;
 }
 
+function policyHashColumn(): AnyPgColumn {
+  return policies.policyHash;
+}
+
+function taskIdColumn(): AnyPgColumn {
+  return tasks.id;
+}
+
+function taskProjectIdColumn(): AnyPgColumn {
+  return tasks.projectId;
+}
+
+function taskPolicyIdColumn(): AnyPgColumn {
+  return tasks.policyId;
+}
+
+function tokenIdColumn(): AnyPgColumn {
+  return cliTokens.id;
+}
+
+function tokenProjectIdColumn(): AnyPgColumn {
+  return cliTokens.projectId;
+}
+
+function chainTransactionIdColumn(): AnyPgColumn {
+  return chainTransactions.id;
+}
+
+function chainTransactionUserIdColumn(): AnyPgColumn {
+  return chainTransactions.userId;
+}
+
+function chainTransactionProjectIdColumn(): AnyPgColumn {
+  return chainTransactions.projectId;
+}
+
+function chainTransactionChainIdColumn(): AnyPgColumn {
+  return chainTransactions.chainId;
+}
+
 export const projectVisibility = pgEnum("project_visibility", ["private", "public"]);
 export const projectStatus = pgEnum("project_status", ["active", "archived"]);
 export const projectRole = pgEnum("project_role", ["owner", "member"]);
 export const taskOffchainStatus = pgEnum("task_offchain_status", [
   "draft",
   "awaiting_chain",
-  "active",
-  "archived"
+  "open",
+  "receipt_submitted",
+  "approved",
+  "rejected",
+  "cancelled",
+  "expired"
 ]);
 export const taskChainStatus = pgEnum("task_chain_status", [
-  "unknown",
+  "none",
   "open",
   "receipt_submitted",
   "approved",
@@ -53,15 +97,15 @@ export const checkStatus = pgEnum("verification_check_status", [
   "passed",
   "failed",
   "timed_out",
-  "error",
-  "skipped"
+  "skipped",
+  "error"
 ]);
 export const chainIntentType = pgEnum("chain_intent_type", [
   "create_task",
   "submit_receipt",
-  "approve_task",
-  "reject_task",
-  "cancel_task",
+  "approve",
+  "reject",
+  "cancel",
   "withdraw"
 ]);
 export const chainTransactionStatus = pgEnum("chain_transaction_status", [
@@ -195,6 +239,7 @@ export const policies = pgTable(
     unique("policies_public_id_unique").on(table.publicId),
     unique("policies_project_hash_unique").on(table.projectId, table.policyHash),
     unique("policies_id_project_unique").on(table.id, table.projectId),
+    unique("policies_id_project_hash_unique").on(table.id, table.projectId, table.policyHash),
     index("policies_project_created_idx").on(table.projectId, table.createdAt),
     check("policies_schema_version_positive", sql`${table.schemaVersion} > 0`),
     check("policies_hash_format", sql`${table.policyHash} ~ '^0x[0-9a-f]{64}$'`),
@@ -217,7 +262,7 @@ export const cliTokens = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     tokenPrefix: varchar("token_prefix", { length: 16 }).notNull(),
-    tokenDigest: varchar("token_digest", { length: 128 }).notNull(),
+    tokenDigest: varchar("token_digest", { length: 64 }).notNull(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt
@@ -225,9 +270,10 @@ export const cliTokens = pgTable(
   (table) => [
     unique("cli_tokens_public_id_unique").on(table.publicId),
     unique("cli_tokens_digest_unique").on(table.tokenDigest),
+    unique("cli_tokens_id_project_unique").on(table.id, table.projectId),
     index("cli_tokens_project_active_idx").on(table.projectId, table.revokedAt),
     check("cli_tokens_public_id_format", sql`${table.publicId} ~ '^[0-9a-hjkmnp-tv-z]{26}$'`),
-    check("cli_tokens_digest_no_plaintext", sql`length(${table.tokenDigest}) >= 43`)
+    check("cli_tokens_digest_format", sql`${table.tokenDigest} ~ '^[0-9a-f]{64}$'`)
   ]
 );
 
@@ -239,6 +285,7 @@ export const tasks = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "restrict" }),
     publicId: varchar("public_id", { length: 26 }).notNull(),
+    policyId: uuid("policy_id").notNull(),
     chainId: bigint("chain_id", { mode: "number" }).notNull(),
     contractAddress: varchar("contract_address", { length: 42 }).notNull(),
     chainTaskId: bigint("chain_task_id", { mode: "bigint" }),
@@ -254,12 +301,19 @@ export const tasks = pgTable(
       .default(sql`0`),
     deadline: timestamp("deadline", { withTimezone: true }),
     offchainStatus: taskOffchainStatus("offchain_status").notNull().default("draft"),
-    chainStatus: taskChainStatus("chain_status").notNull().default("unknown"),
+    chainStatus: taskChainStatus("chain_status").notNull().default("none"),
     createdAt,
     updatedAt
   },
   (table) => [
     unique("tasks_public_id_unique").on(table.publicId),
+    unique("tasks_id_project_unique").on(table.id, table.projectId),
+    unique("tasks_id_policy_project_unique").on(table.id, table.policyId, table.projectId),
+    foreignKey({
+      columns: [table.policyId, table.projectId, table.policyHash],
+      foreignColumns: [policyIdColumn(), policyProjectIdColumn(), policyHashColumn()],
+      name: "tasks_policy_same_project_hash_fk"
+    }),
     unique("tasks_chain_identity_unique").on(
       table.chainId,
       table.contractAddress,
@@ -284,9 +338,9 @@ export const evidenceBundles = pgTable(
   "evidence_bundles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    taskId: uuid("task_id")
-      .notNull()
-      .references(() => tasks.id, { onDelete: "restrict" }),
+    taskId: uuid("task_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    policyId: uuid("policy_id").notNull(),
     publicId: varchar("public_id", { length: 26 }).notNull(),
     schemaVersion: integer("schema_version").notNull(),
     objectLocation: text("object_location").notNull(),
@@ -295,16 +349,25 @@ export const evidenceBundles = pgTable(
     gitObjectId: varchar("git_object_id", { length: 64 }).notNull(),
     passing: boolean("passing").notNull(),
     bundleSizeBytes: integer("bundle_size_bytes").notNull(),
-    submittedByTokenId: uuid("submitted_by_token_id")
-      .notNull()
-      .references(() => cliTokens.id, { onDelete: "restrict" }),
+    submittedByTokenId: uuid("submitted_by_token_id").notNull(),
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    requestHash: varchar("request_hash", { length: 66 }).notNull(),
     createdAt
   },
   (table) => [
     unique("evidence_public_id_unique").on(table.publicId),
     unique("evidence_task_hash_unique").on(table.taskId, table.evidenceHash),
     unique("evidence_token_idempotency_unique").on(table.submittedByTokenId, table.idempotencyKey),
+    foreignKey({
+      columns: [table.taskId, table.policyId, table.projectId],
+      foreignColumns: [taskIdColumn(), taskPolicyIdColumn(), taskProjectIdColumn()],
+      name: "evidence_task_policy_project_fk"
+    }),
+    foreignKey({
+      columns: [table.submittedByTokenId, table.projectId],
+      foreignColumns: [tokenIdColumn(), tokenProjectIdColumn()],
+      name: "evidence_token_project_fk"
+    }),
     index("evidence_task_created_idx").on(table.taskId, table.createdAt),
     check("evidence_public_id_format", sql`${table.publicId} ~ '^[0-9a-hjkmnp-tv-z]{26}$'`),
     check("evidence_schema_version_positive", sql`${table.schemaVersion} > 0`),
@@ -316,6 +379,7 @@ export const evidenceBundles = pgTable(
       "evidence_git_object_id_format",
       sql`${table.gitObjectId} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
     ),
+    check("evidence_request_hash_format", sql`${table.requestHash} ~ '^0x[0-9a-f]{64}$'`),
     check("evidence_bundle_size_positive", sql`${table.bundleSizeBytes} > 0`)
   ]
 );
@@ -328,10 +392,12 @@ export const verificationChecks = pgTable(
       .notNull()
       .references(() => evidenceBundles.id, { onDelete: "cascade" }),
     checkKey: varchar("check_key", { length: 80 }).notNull(),
+    label: varchar("label", { length: 128 }).notNull(),
     required: boolean("required").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     durationMs: integer("duration_ms").notNull(),
     exitCode: integer("exit_code"),
+    signal: varchar("signal", { length: 32 }),
     stdoutDigest: varchar("stdout_digest", { length: 66 }).notNull(),
     stderrDigest: varchar("stderr_digest", { length: 66 }).notNull(),
     stdoutPreview: text("stdout_preview").notNull(),
@@ -340,11 +406,12 @@ export const verificationChecks = pgTable(
   },
   (table) => [
     unique("verification_checks_bundle_key_unique").on(table.evidenceBundleId, table.checkKey),
-    check(
-      "verification_checks_key_format",
-      sql`${table.checkKey} ~ '^[a-z0-9]+(?:[-_][a-z0-9]+)*$'`
-    ),
+    check("verification_checks_key_format", sql`${table.checkKey} ~ '^[a-zA-Z0-9._-]{1,64}$'`),
     check("verification_checks_duration_nonnegative", sql`${table.durationMs} >= 0`),
+    check(
+      "verification_checks_status_outcome_consistent",
+      sql`(${table.status} = 'passed' and ${table.exitCode} = 0 and ${table.signal} is null) or (${table.status} = 'failed' and ((${table.exitCode} is not null and ${table.exitCode} <> 0) or ${table.signal} is not null)) or (${table.status} in ('timed_out', 'error') and ${table.exitCode} is null) or (${table.status} = 'skipped' and ${table.exitCode} is null and ${table.signal} is null)`
+    ),
     check(
       "verification_checks_digests_format",
       sql`${table.stdoutDigest} ~ '^0x[0-9a-f]{64}$' and ${table.stderrDigest} ~ '^0x[0-9a-f]{64}$'`
@@ -360,7 +427,10 @@ export const chainTransactions = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    taskId: uuid("task_id").references(() => tasks.id, { onDelete: "restrict" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "restrict" }),
+    taskId: uuid("task_id"),
     intentType: chainIntentType("intent_type").notNull(),
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
     requestHash: varchar("request_hash", { length: 66 }).notNull(),
@@ -372,15 +442,33 @@ export const chainTransactions = pgTable(
     status: chainTransactionStatus("status").notNull().default("prepared"),
     blockNumber: bigint("block_number", { mode: "bigint" }),
     failureCode: varchar("failure_code", { length: 100 }),
-    replacedByTransactionId: uuid("replaced_by_transaction_id").references(
-      (): AnyPgColumn => chainTransactions.id,
-      { onDelete: "set null" }
-    ),
+    replacedByTransactionId: uuid("replaced_by_transaction_id"),
     createdAt,
     updatedAt
   },
   (table) => [
     unique("chain_transactions_public_id_unique").on(table.publicId),
+    unique("chain_transactions_replacement_scope_unique").on(
+      table.id,
+      table.userId,
+      table.projectId,
+      table.chainId
+    ),
+    foreignKey({
+      columns: [table.taskId, table.projectId],
+      foreignColumns: [taskIdColumn(), taskProjectIdColumn()],
+      name: "chain_transactions_task_project_fk"
+    }),
+    foreignKey({
+      columns: [table.replacedByTransactionId, table.userId, table.projectId, table.chainId],
+      foreignColumns: [
+        chainTransactionIdColumn(),
+        chainTransactionUserIdColumn(),
+        chainTransactionProjectIdColumn(),
+        chainTransactionChainIdColumn()
+      ],
+      name: "chain_transactions_replacement_scope_fk"
+    }),
     unique("chain_transactions_user_intent_idempotency_unique").on(
       table.userId,
       table.intentType,
@@ -408,6 +496,14 @@ export const chainTransactions = pgTable(
     check(
       "chain_transactions_confirmation_fields",
       sql`(${table.status} <> 'confirmed') or (${table.transactionHash} is not null and ${table.blockNumber} is not null)`
+    ),
+    check(
+      "chain_transactions_submitted_fields",
+      sql`(${table.status} not in ('submitted', 'confirmed', 'replaced', 'reverted')) or (${table.transactionHash} is not null and ${table.nonce} is not null)`
+    ),
+    check(
+      "chain_transactions_replacement_state_consistent",
+      sql`(${table.status} = 'replaced' and ${table.replacedByTransactionId} is not null) or (${table.status} <> 'replaced' and ${table.replacedByTransactionId} is null)`
     )
   ]
 );
@@ -452,8 +548,8 @@ export const auditEvents = pgTable(
   {
     id: bigserial("id", { mode: "bigint" }).primaryKey(),
     actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
-    projectId: uuid("project_id").references(() => projects.id, { onDelete: "set null" }),
-    taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "restrict" }),
+    taskId: uuid("task_id"),
     action: varchar("action", { length: 120 }).notNull(),
     correlationId: varchar("correlation_id", { length: 100 }),
     metadataSafeJson: jsonb("metadata_safe_json").notNull(),
@@ -462,6 +558,15 @@ export const auditEvents = pgTable(
   (table) => [
     index("audit_events_project_created_idx").on(table.projectId, table.createdAt),
     index("audit_events_task_created_idx").on(table.taskId, table.createdAt),
+    foreignKey({
+      columns: [table.taskId, table.projectId],
+      foreignColumns: [taskIdColumn(), taskProjectIdColumn()],
+      name: "audit_events_task_project_fk"
+    }),
+    check(
+      "audit_events_task_requires_project",
+      sql`${table.taskId} is null or ${table.projectId} is not null`
+    ),
     check("audit_events_action_format", sql`${table.action} ~ '^[a-z][a-z0-9_.-]+$'`)
   ]
 );
@@ -474,7 +579,7 @@ export const apiIdempotencyKeys = pgTable(
     operation: varchar("operation", { length: 100 }).notNull(),
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
     requestHash: varchar("request_hash", { length: 66 }).notNull(),
-    resourcePublicId: varchar("resource_public_id", { length: 26 }),
+    resourcePublicId: varchar("resource_public_id", { length: 26 }).notNull(),
     createdAt,
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull()
   },
@@ -486,6 +591,10 @@ export const apiIdempotencyKeys = pgTable(
     ),
     index("api_idempotency_expiry_idx").on(table.expiresAt),
     check("api_idempotency_request_hash_format", sql`${table.requestHash} ~ '^0x[0-9a-f]{64}$'`),
+    check(
+      "api_idempotency_resource_public_id_format",
+      sql`${table.resourcePublicId} ~ '^[0-9a-hjkmnp-tv-z]{26}$'`
+    ),
     check("api_idempotency_expiry_after_creation", sql`${table.expiresAt} > ${table.createdAt}`)
   ]
 );

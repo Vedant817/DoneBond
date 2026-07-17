@@ -10,17 +10,29 @@ export interface DatabaseHandle {
   close(): Promise<void>;
 }
 
-export function createDatabase(
-  environmentSource: Record<string, string | undefined> = process.env
-): DatabaseHandle {
-  const environment = parseDatabaseEnvironment(environmentSource);
-  const sql: Sql = postgres(environment.DATABASE_URL, {
+export function buildPostgresOptions(
+  environment: DatabaseEnvironment
+): postgres.Options<Record<never, never>> {
+  return {
     connect_timeout: environment.DATABASE_CONNECT_TIMEOUT_SECONDS,
     idle_timeout: environment.DATABASE_IDLE_TIMEOUT_SECONDS,
     max: environment.DATABASE_MAX_CONNECTIONS,
     prepare: true,
-    ssl: environment.DATABASE_SSL === "require" ? "require" : false
-  });
+    ssl:
+      environment.DATABASE_SSL === "require"
+        ? {
+            rejectUnauthorized: true,
+            ...(environment.DATABASE_CA_CERT ? { ca: environment.DATABASE_CA_CERT } : {})
+          }
+        : false
+  };
+}
+
+export function createDatabase(
+  environmentSource: Record<string, string | undefined> = process.env
+): DatabaseHandle {
+  const environment = parseDatabaseEnvironment(environmentSource);
+  const sql: Sql = postgres(environment.DATABASE_URL, buildPostgresOptions(environment));
   return {
     db: drizzle(sql, { schema: databaseSchema }),
     environment,

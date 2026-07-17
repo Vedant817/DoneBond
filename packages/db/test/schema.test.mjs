@@ -3,14 +3,26 @@ import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { getTableConfig } from "drizzle-orm/pg-core";
+import {
+  ChainTransactionStatusSchema,
+  ChainTransactionSchema,
+  CheckStatusSchema,
+  TaskChainStatusSchema,
+  TaskOffchainStatusSchema
+} from "../../shared/dist/index.js";
 
 import {
   apiIdempotencyKeys,
+  chainIntentType,
+  chainTransactionStatus,
+  checkStatus,
   chainTransactions,
   cliTokens,
   contractEvents,
   databaseSchema,
   evidenceBundles,
+  taskChainStatus,
+  taskOffchainStatus,
   tasks,
   wallets
 } from "../dist/schema.js";
@@ -33,6 +45,14 @@ test("schema exposes every MVP entity", () => {
     "verificationChecks",
     "wallets"
   ]);
+});
+
+test("database lifecycle enums exactly match the shared domain", () => {
+  assert.deepEqual(taskOffchainStatus.enumValues, TaskOffchainStatusSchema.options);
+  assert.deepEqual(taskChainStatus.enumValues, TaskChainStatusSchema.options);
+  assert.deepEqual(chainIntentType.enumValues, ChainTransactionSchema.shape.intentType.options);
+  assert.deepEqual(chainTransactionStatus.enumValues, ChainTransactionStatusSchema.options);
+  assert.deepEqual(checkStatus.enumValues, CheckStatusSchema.options);
 });
 
 test("high-risk identities have database constraints", () => {
@@ -62,9 +82,17 @@ test("initial migration includes referential and normalization safeguards", asyn
   const migrationUrl = new URL(migrationNames[0], migrationsUrl);
   const sql = await readFile(migrationUrl, "utf8");
   assert.match(sql, /projects_active_policy_same_project_fk/);
-  assert.match(sql, /chain_transactions_replaced_by_transaction_id_chain_transactions_id_fk/);
+  assert.match(sql, /tasks_policy_same_project_hash_fk/);
+  assert.match(sql, /evidence_task_policy_project_fk/);
+  assert.match(sql, /evidence_token_project_fk/);
+  assert.match(sql, /audit_events_task_project_fk/);
+  assert.match(sql, /chain_transactions_replacement_scope_fk/);
+  assert.match(sql, /chain_transactions_replacement_state_consistent/);
   assert.match(sql, /wallets_address_normalized_format/);
   assert.match(sql, /contract_events_chain_tx_log_unique/);
   assert.match(sql, /evidence_token_idempotency_unique/);
+  assert.match(sql, /evidence_request_hash_format/);
+  assert.match(sql, /cli_tokens_digest_format/);
+  assert.match(sql, /"resource_public_id" varchar\(26\) NOT NULL/);
   assert.doesNotMatch(sql, /token_plaintext|private_key|mnemonic/i);
 });

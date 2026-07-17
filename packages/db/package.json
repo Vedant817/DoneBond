@@ -3,12 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "node --enable-source-maps dist/migrate.js",
-    "test": "pnpm build && node --test test/*.test.mjs",
+    "test": "tsc -p ../shared/tsconfig.json && pnpm build && node --test test/*.test.mjs",
+    "test:integration": "pnpm build && node --test test/postgres.integration.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
