@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 
@@ -87,7 +87,7 @@ export function normalizeConnection(input: ConnectionInput): ConnectionInput {
   };
 }
 
-async function readBoundedJson(response: Response): Promise<unknown> {
+export async function readBoundedJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
   if (contentType !== "application/json" && !contentType?.endsWith("+json")) {
     throw new CliError(
@@ -190,6 +190,19 @@ export async function validateConnection(
 
 function repositoryFingerprint(repositoryRoot: string): string {
   return createHash("sha256").update(repositoryRoot).digest("hex");
+}
+
+function connectionPaths(
+  repositoryRoot: string,
+  environment: NodeJS.ProcessEnv
+): { configPath: string; credentialsPath: string; fingerprint: string } {
+  const fingerprint = repositoryFingerprint(repositoryRoot);
+  const directory = join(configRootDirectory(environment), "donebond", "repositories", fingerprint);
+  return {
+    configPath: join(directory, "config.json"),
+    credentialsPath: join(directory, "credentials.json"),
+    fingerprint
+  };
 }
 
 function configRootDirectory(environment: NodeJS.ProcessEnv): string {
@@ -297,4 +310,129 @@ export async function storeConnection(
   await atomicPrivateWrite(configPath, `${JSON.stringify(config, null, 2)}\n`);
   await atomicPrivateWrite(credentialsPath, `${JSON.stringify(credential, null, 2)}\n`);
   return { configPath, credentialsPath };
+}
+
+async function readPrivateJson(path: string): Promise<unknown> {
+  const stats = await lstat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") {
+      throw new CliError(
+        "CONFIG_INVALID",
+        "DoneBond API configuration is missing; run donebond init.",
+        ExitCode.Configuration
+      );
+    }
+    throw error;
+  });
+  if (stats.isSymbolicLink() || !stats.isFile()) {
+    throw new CliError(
+      "CONFIG_UNSAFE_PATH",
+      "Refusing to read configuration through an unsafe filesystem entry.",
+      ExitCode.Configuration
+    );
+  }
+  if (stats.size > 16 * 1024 || (process.platform !== "win32" && (stats.mode & 0o077) !== 0)) {
+    throw new CliError(
+      "CONFIG_UNSAFE_PATH",
+      "Configuration must be a small file readable only by the current user.",
+      ExitCode.Configuration
+    );
+  }
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as unknown;
+  } catch (error) {
+    throw new CliError(
+      "CONFIG_INVALID",
+      "DoneBond API configuration is malformed.",
+      ExitCode.Configuration,
+      { cause: error }
+    );
+  }
+}
+
+export async function loadConnection(
+  repositoryRoot: string,
+  environment: NodeJS.ProcessEnv = process.env
+): Promise<ConnectionInput> {
+  const paths = connectionPaths(repositoryRoot, environment);
+  const root = configRootDirectory(environment);
+  const base = join(root, "donebond");
+  const repositories = join(base, "repositories");
+  const connectionDirectory = dirname(paths.configPath);
+  try {
+    await assertSafeOwnedDirectory(root, true);
+    await assertSafeOwnedDirectory(base, false);
+    await assertSafeOwnedDirectory(repositories, false);
+    await assertSafeOwnedDirectory(connectionDirectory, false);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new CliError(
+        "CONFIG_INVALID",
+        "DoneBond API configuration is missing; run donebond init.",
+        ExitCode.Configuration
+      );
+    }
+    throw error;
+  }
+  const [rawConfig, rawCredential] = await Promise.all([
+    readPrivateJson(paths.configPath),
+    readPrivateJson(paths.credentialsPath)
+  ]);
+  const config = rawConfig as Record<string, unknown>;
+  const credential = rawCredential as Record<string, unknown>;
+  if (
+    typeof rawConfig !== "object" ||
+    rawConfig === null ||
+    Array.isArray(rawConfig) ||
+    Object.keys(config).sort().join(",") !==
+      "apiUrl,projectId,repositoryFingerprint,schemaVersion" ||
+    config.schemaVersion !== 1 ||
+    config.repositoryFingerprint !== paths.fingerprint ||
+    typeof config.apiUrl !== "string" ||
+    typeof config.projectId !== "string" ||
+    typeof rawCredential !== "object" ||
+    rawCredential === null ||
+    Array.isArray(rawCredential) ||
+    Object.keys(credential).sort().join(",") !== "schemaVersion,token" ||
+    credential.schemaVersion !== 1 ||
+    typeof credential.token !== "string"
+  ) {
+    throw new CliError(
+      "CONFIG_INVALID",
+      "DoneBond API configuration has an unsupported shape.",
+      ExitCode.Configuration
+    );
+  }
+  return normalizeConnection({
+    apiUrl: config.apiUrl,
+    projectId: config.projectId,
+    token: credential.token
+  });
+}
+
+export async function authenticatedGetJson(
+  connection: ConnectionInput,
+  path: string,
+  fetchImplementation: typeof fetch = fetch
+): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetchImplementation(`${connection.apiUrl}${path}`, {
+      method: "GET",
+      headers: { accept: "application/json", authorization: `Bearer ${connection.token}` },
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000)
+    });
+  } catch (error) {
+    throw new CliError("CONNECTION_FAILED", "Could not reach the DoneBond API.", ExitCode.Network, {
+      cause: error
+    });
+  }
+  if (!response.ok) {
+    throw new CliError(
+      "CONNECTION_FAILED",
+      `DoneBond API rejected the request (HTTP ${response.status}).`,
+      ExitCode.Network
+    );
+  }
+  return readBoundedJson(response);
 }

@@ -31,6 +31,7 @@ export interface InitResult {
 const GITIGNORE_BLOCK = `# DoneBond local credentials and generated evidence
 .donebond/config.json
 .donebond/credentials.json
+.donebond/task.json
 .donebond/*.evidence.json
 `;
 

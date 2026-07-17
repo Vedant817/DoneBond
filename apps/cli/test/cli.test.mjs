@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile
+} from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
@@ -8,8 +18,10 @@ import { Readable, Writable } from "node:stream";
 import { promisify } from "node:util";
 import test from "node:test";
 
+import { hashCanonicalTask, parsePolicyFile } from "@donebond/evidence";
+
 import { ExitCode, initializeRepository, runCli } from "../dist/index.js";
-import { storeConnection, validateConnection } from "../dist/config.js";
+import { loadConnection, storeConnection, validateConnection } from "../dist/config.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -47,6 +59,48 @@ async function withApiServer(handler) {
     url: `http://127.0.0.1:${address.port}`,
     close: () =>
       new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+  };
+}
+
+function taskFixture(policyHash, overrides = {}) {
+  const canonical = {
+    kind: "donebond.task",
+    schemaVersion: 1,
+    projectPublicId: "project_123",
+    repositoryIdentity: "github.com/Vedant817/example",
+    targetBranch: "main",
+    baseCommit: null,
+    title: "Verify the implementation",
+    description: "Run the deterministic DoneBond policy.",
+    acceptanceCriteria: [{ key: "tests", description: "All required checks pass." }],
+    assigneeWallet: "0x2222222222222222222222222222222222222222",
+    deadlineUnixSeconds: null,
+    rewardWei: "0",
+    policyHash
+  };
+  return {
+    schemaVersion: 1,
+    publicId: "task_123",
+    projectPublicId: canonical.projectPublicId,
+    chainId: 10143,
+    chainTaskId: null,
+    title: canonical.title,
+    description: canonical.description,
+    repositoryUrl: "https://github.com/Vedant817/example.git",
+    targetBranch: canonical.targetBranch,
+    baseCommit: canonical.baseCommit,
+    acceptanceCriteria: canonical.acceptanceCriteria,
+    taskHash: hashCanonicalTask(canonical),
+    policyHash,
+    creatorWallet: "0x1111111111111111111111111111111111111111",
+    assigneeWallet: canonical.assigneeWallet,
+    rewardWei: canonical.rewardWei,
+    deadline: null,
+    offchainStatus: "open",
+    chainStatus: "open",
+    createdAt: "2026-07-17T05:30:00.000Z",
+    updatedAt: "2026-07-17T05:30:00.000Z",
+    ...overrides
   };
 }
 
@@ -162,6 +216,141 @@ test("policy validate rejects unsafe commands and paths outside the repository",
     ExitCode.Repository
   );
   assert.match(pathError.value(), /REPOSITORY_INVALID/u);
+});
+
+test("task pull authenticates and verifies project, policy, and canonical task commitments", async (context) => {
+  const root = await gitRepository();
+  const configHome = await temporaryDirectory("donebond-task-config-");
+  await initializeRepository({ startDirectory: root, force: false });
+  const policy = await parsePolicyFile(join(root, ".donebond", "policy.yml"), root);
+  const task = taskFixture(policy.policyHash);
+  const api = await withApiServer((request, response) => {
+    assert.match(request.headers.authorization ?? "", /^Bearer dbt_dummy_/u);
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify(request.url?.includes("/tasks/") ? task : { publicId: "project_123" })
+    );
+  });
+  context.after(() => api.close());
+  const token = "dbt_dummy_task_pull_test_only_token_abcdefghijklmnopqrstuvwxyz";
+  await initializeRepository({
+    startDirectory: root,
+    force: true,
+    connection: { apiUrl: api.url, projectId: "project_123", token },
+    environment: { XDG_CONFIG_HOME: configHome }
+  });
+  const stdout = captureStream();
+  assert.equal(
+    await runCli(["task", "pull", "task_123", "--repo", root, "--json"], {
+      stdout: stdout.stream,
+      stderr: captureStream().stream,
+      environment: { XDG_CONFIG_HOME: configHome }
+    }),
+    ExitCode.Success
+  );
+  const result = JSON.parse(stdout.value());
+  assert.equal(result.taskHash, task.taskHash);
+  assert.deepEqual(JSON.parse(await readFile(join(root, ".donebond", "task.json"), "utf8")), task);
+  const ignore = await readFile(join(root, ".gitignore"), "utf8");
+  assert.match(ignore, /^\.donebond\/task\.json$/mu);
+});
+
+test("task pull rejects mismatched and oversized payloads without writing a manifest", async (context) => {
+  const root = await gitRepository();
+  const configHome = await temporaryDirectory("donebond-task-reject-config-");
+  await initializeRepository({ startDirectory: root, force: false });
+  const policy = await parsePolicyFile(join(root, ".donebond", "policy.yml"), root);
+  let payload = taskFixture(policy.policyHash);
+  const api = await withApiServer((request, response) => {
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify(request.url?.includes("/tasks/") ? payload : { publicId: "project_123" })
+    );
+  });
+  context.after(() => api.close());
+  await initializeRepository({
+    startDirectory: root,
+    force: true,
+    connection: {
+      apiUrl: api.url,
+      projectId: "project_123",
+      token: "dbt_dummy_task_reject_test_only_token_abcdefghijklmnopqrstuvwxyz"
+    },
+    environment: { XDG_CONFIG_HOME: configHome }
+  });
+  const cases = [
+    {
+      value: taskFixture(policy.policyHash, { taskHash: `0x${"f".repeat(64)}` }),
+      exit: ExitCode.Configuration
+    },
+    {
+      value: taskFixture(policy.policyHash, { publicId: "task_other" }),
+      exit: ExitCode.Configuration
+    },
+    {
+      value: taskFixture(policy.policyHash, { projectPublicId: "project_other" }),
+      exit: ExitCode.Configuration
+    },
+    {
+      value: taskFixture(policy.policyHash, { policyHash: `0x${"e".repeat(64)}` }),
+      exit: ExitCode.Configuration
+    },
+    { value: {}, exit: ExitCode.Configuration },
+    { value: { padding: "x".repeat(70_000) }, exit: ExitCode.Network }
+  ];
+  for (const testCase of cases) {
+    payload = testCase.value;
+    assert.equal(
+      await runCli(["task", "pull", "task_123", "--repo", root], {
+        stdout: captureStream().stream,
+        stderr: captureStream().stream,
+        environment: { XDG_CONFIG_HOME: configHome }
+      }),
+      testCase.exit
+    );
+    await assert.rejects(readFile(join(root, ".donebond", "task.json")), { code: "ENOENT" });
+  }
+});
+
+test("task pull rejects a symlinked .donebond parent without touching source", async (context) => {
+  const root = await gitRepository();
+  const configHome = await temporaryDirectory("donebond-task-parent-config-");
+  await initializeRepository({ startDirectory: root, force: false });
+  const policyText = await readFile(join(root, ".donebond", "policy.yml"), "utf8");
+  const policy = await parsePolicyFile(join(root, ".donebond", "policy.yml"), root);
+  const task = taskFixture(policy.policyHash);
+  const api = await withApiServer((request, response) => {
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify(request.url?.includes("/tasks/") ? task : { publicId: "project_123" })
+    );
+  });
+  context.after(() => api.close());
+  await initializeRepository({
+    startDirectory: root,
+    force: true,
+    connection: {
+      apiUrl: api.url,
+      projectId: "project_123",
+      token: "dbt_dummy_parent_test_only_token_abcdefghijklmnopqrstuvwxyz"
+    },
+    environment: { XDG_CONFIG_HOME: configHome }
+  });
+  await rm(join(root, ".donebond"), { recursive: true });
+  const sourceDirectory = join(root, "src");
+  await mkdir(sourceDirectory);
+  await writeFile(join(sourceDirectory, "policy.yml"), policyText, "utf8");
+  await writeFile(join(sourceDirectory, "task.json"), "source sentinel\n", "utf8");
+  await symlink(sourceDirectory, join(root, ".donebond"));
+  assert.equal(
+    await runCli(["task", "pull", "task_123", "--repo", root], {
+      stdout: captureStream().stream,
+      stderr: captureStream().stream,
+      environment: { XDG_CONFIG_HOME: configHome }
+    }),
+    ExitCode.Repository
+  );
+  assert.equal(await readFile(join(sourceDirectory, "task.json"), "utf8"), "source sentinel\n");
 });
 
 test("init refuses overwrite unless forced and updates gitignore idempotently", async () => {
@@ -315,6 +504,28 @@ test("configuration storage rejects a symlinked XDG_CONFIG_HOME", async () => {
     (error) => error.code === "CONFIG_UNSAFE_PATH" && error.exitCode === ExitCode.Configuration
   );
   await assert.rejects(lstat(join(external, "donebond")), { code: "ENOENT" });
+});
+
+test("configuration loading rejects an XDG root replaced by a symlink", async () => {
+  const parent = await temporaryDirectory("donebond-cli-load-config-");
+  const configHome = join(parent, "config");
+  await mkdir(configHome, { mode: 0o700 });
+  const repository = "/test/repository";
+  await storeConnection(
+    repository,
+    {
+      apiUrl: "https://api.example.test",
+      projectId: "project_123",
+      token: "dbt_dummy_load_test_only_token_abcdefghijklmnopqrstuvwxyz"
+    },
+    { XDG_CONFIG_HOME: configHome }
+  );
+  const moved = join(parent, "moved-config");
+  await rename(configHome, moved);
+  await symlink(moved, configHome);
+  await assert.rejects(loadConnection(repository, { XDG_CONFIG_HOME: configHome }), (error) => {
+    return error.code === "CONFIG_UNSAFE_PATH";
+  });
 });
 
 test("path safety rejects symbolic-link policy and gitignore targets", async () => {

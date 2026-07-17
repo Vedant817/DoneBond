@@ -11,6 +11,7 @@ import { CliError, ExitCode, toCliError } from "./errors.js";
 import { initializeRepository } from "./init.js";
 import { CliOutput } from "./output.js";
 import { renderPolicySummary, validatePolicyCommand } from "./policy-command.js";
+import { pullTask } from "./task-command.js";
 import { readVersion } from "./version.js";
 
 const HELP = `DoneBond CLI
@@ -23,6 +24,7 @@ Usage:
 Commands:
   init             Initialize DoneBond policy and optional API configuration
   policy validate  Validate and explain the deterministic verification policy
+  task pull        Fetch and validate a task into the local repository
 
 Global options:
   --json       Emit newline-delimited JSON results and errors
@@ -63,6 +65,16 @@ Options:
   -h, --help           Show this command help
 `;
 
+const TASK_PULL_HELP = `Usage: donebond task pull <task-id> [options]
+
+Fetches an authenticated task, verifies its project, policy, and canonical task
+commitments, then saves .donebond/task.json without modifying source files.
+
+Options:
+  --repo <path>        Start repository discovery at path (default: current directory)
+  -h, --help           Show this command help
+`;
+
 interface CliContext {
   stdin: Readable & { isTTY?: boolean; setRawMode?: (mode: boolean) => void };
   stdout: Writable;
@@ -95,6 +107,12 @@ interface PolicyArguments {
   help: boolean;
   repo: string;
   policyPath?: string;
+}
+
+interface TaskPullArguments {
+  help: boolean;
+  repo: string;
+  taskId?: string;
 }
 
 function optionValue(arguments_: string[], index: number, option: string): string {
@@ -196,6 +214,45 @@ function parsePolicyArguments(arguments_: string[], defaultRepository: string): 
           ExitCode.Usage
         );
     }
+  }
+  return parsed;
+}
+
+function parseTaskPullArguments(
+  arguments_: string[],
+  defaultRepository: string
+): TaskPullArguments {
+  const parsed: TaskPullArguments = { help: false, repo: defaultRepository };
+  const seen = new Set<string>();
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === undefined) continue;
+    const canonical = argument === "-h" ? "--help" : argument;
+    if (!canonical.startsWith("-")) {
+      if (parsed.taskId !== undefined) {
+        throw new CliError("CLI_USAGE", "task pull accepts exactly one task ID.", ExitCode.Usage);
+      }
+      parsed.taskId = canonical;
+      continue;
+    }
+    if (seen.has(canonical)) {
+      throw new CliError("CLI_USAGE", "A task pull option was provided twice.", ExitCode.Usage);
+    }
+    seen.add(canonical);
+    switch (canonical) {
+      case "--help":
+        parsed.help = true;
+        break;
+      case "--repo":
+        parsed.repo = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      default:
+        throw new CliError("CLI_USAGE", "Unknown task pull option.", ExitCode.Usage);
+    }
+  }
+  if (!parsed.help && parsed.taskId === undefined) {
+    throw new CliError("CLI_USAGE", "task pull requires a task ID.", ExitCode.Usage);
   }
   return parsed;
 }
@@ -357,6 +414,34 @@ async function execute(
       policyPath: summary.policyPath,
       policyHash: summary.policyHash,
       checks: summary.checks
+    });
+    return ExitCode.Success;
+  }
+  if (filtered[0] === "task") {
+    if (filtered[1] !== "pull") {
+      throw new CliError(
+        "CLI_USAGE",
+        "Unknown task command. Run donebond task pull --help.",
+        ExitCode.Usage
+      );
+    }
+    const taskArguments = parseTaskPullArguments(filtered.slice(2), context.cwd);
+    if (taskArguments.help) {
+      output.result(TASK_PULL_HELP.trimEnd());
+      return ExitCode.Success;
+    }
+    const result = await pullTask({
+      startDirectory: taskArguments.repo,
+      taskId: taskArguments.taskId as string,
+      environment: context.environment,
+      fetchImplementation: context.fetchImplementation
+    });
+    output.result("DoneBond task pulled and verified.", {
+      taskId: result.task.publicId,
+      projectId: result.task.projectPublicId,
+      taskHash: result.task.taskHash,
+      policyHash: result.task.policyHash,
+      manifestPath: result.manifestPath
     });
     return ExitCode.Success;
   }
