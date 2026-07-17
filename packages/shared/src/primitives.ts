@@ -71,6 +71,40 @@ export const RepositoryIdentitySchema = z
   )
   .transform((value) => value.toLowerCase().replace(/\.git$/, ""));
 
+export const GitHubRepositoryUrlSchema = z
+  .string()
+  .max(2048)
+  .superRefine((value, context) => {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      context.addIssue({ code: "custom", message: "Expected an absolute GitHub repository URL" });
+      return;
+    }
+    const path = url.pathname.replace(/^\/+|\/+$/gu, "").replace(/\.git$/iu, "");
+    if (
+      url.protocol !== "https:" ||
+      url.hostname.toLowerCase() !== "github.com" ||
+      url.port !== "" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      !RepositoryIdentitySchema.safeParse(`github.com/${path}`).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Expected a credential-free HTTPS GitHub owner/repository URL"
+      });
+    }
+  })
+  .transform((value) => {
+    const url = new URL(value);
+    const path = url.pathname.replace(/^\/+|\/+$/gu, "").replace(/\.git$/iu, "");
+    return `https://${RepositoryIdentitySchema.parse(`github.com/${path}`)}`;
+  });
+
 export const HexSignatureSchema = z
   .string()
   .regex(/^0x[0-9a-fA-F]{130}$/, "Expected a 65-byte signature")

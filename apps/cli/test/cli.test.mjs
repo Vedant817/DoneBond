@@ -299,7 +299,10 @@ test("task pull authenticates and verifies project, policy, and canonical task c
   );
   const result = JSON.parse(stdout.value());
   assert.equal(result.taskHash, task.taskHash);
-  assert.deepEqual(JSON.parse(await readFile(join(root, ".donebond", "task.json"), "utf8")), task);
+  assert.deepEqual(JSON.parse(await readFile(join(root, ".donebond", "task.json"), "utf8")), {
+    ...task,
+    repositoryUrl: "https://github.com/vedant817/example"
+  });
   const ignore = await readFile(join(root, ".gitignore"), "utf8");
   assert.match(ignore, /^\.donebond\/task\.json$/mu);
 });

@@ -57,9 +57,35 @@ POST   /api/v1/projects
 GET    /api/v1/projects
 GET    /api/v1/projects/:projectId
 PATCH  /api/v1/projects/:projectId
+POST   /api/v1/projects/:projectId/policies
+GET    /api/v1/projects/:projectId/policies
+GET    /api/v1/projects/:projectId/policies/:policyId
+POST   /api/v1/projects/:projectId/policies/:policyId/activate
 POST   /api/v1/projects/:projectId/cli-tokens
 DELETE /api/v1/projects/:projectId/cli-tokens/:tokenId
 ```
+
+Project creation accepts only `slug`, `name`, `repositoryUrl`, `defaultBranch`,
+and `visibility`. The repository is a canonical credential-free
+`https://github.com/owner/repository` identity, and the branch must satisfy Git
+reference safety rules. Project reads are membership-scoped and return only the
+versioned public project DTO plus the caller's `owner` or `member` role. Project
+updates are owner-only, keep the slug and owner immutable, and accept a nonempty
+subset of `name`, `repositoryUrl`, `defaultBranch`, `visibility`, and `status`.
+Archiving is reversible for the MVP so an owner can recover a project, but an
+archived project cannot accept or activate policy versions. Repository identity
+cannot change after the first task exists.
+
+Policy upload accepts strict JSON `{sourcePath, yaml, activate}` with at most 128
+KiB of YAML. The server parses the duplicate-safe versioned policy, rejects unsafe
+commands/paths/redaction expressions, canonicalizes it with RFC 8785, and computes
+the policy hash; client-provided canonical JSON or hashes are not trusted. Versions
+are immutable and ordered by `(createdAt, publicId)`. Member list responses expose
+only public ID, schema version, policy hash, safe source path, active state, and
+creation time. Member detail adds the canonical policy, never raw YAML. Upload and
+activation are owner-only, idempotent, audited transactions; activate-on-upload is
+atomic. Project and policy list endpoints use opaque cursor pagination with a
+validated limit from 1 through 100.
 
 ### Tasks
 

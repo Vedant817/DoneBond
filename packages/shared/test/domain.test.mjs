@@ -9,6 +9,7 @@ import {
   ERROR_CODES,
   ErrorCodeSchema,
   PASSING_RECEIPT_TYPEHASH,
+  ProjectSchema,
   ReceiptSchema,
   TaskSchema,
   computeReceiptAttestationDigest,
@@ -18,6 +19,34 @@ import {
 const HASH = `0x${"ab".repeat(32)}`;
 const ADDRESS = `0x${"12".repeat(20)}`;
 const NOW = "2026-07-17T00:00:00.000Z";
+
+test("project metadata matches GitHub and database constraints", () => {
+  const project = {
+    schemaVersion: 1,
+    publicId: "project_001",
+    slug: "done-bond",
+    name: "DoneBond",
+    repositoryUrl: "https://GitHub.com/Vedant817/DoneBond.git",
+    defaultBranch: "main",
+    visibility: "private",
+    status: "active",
+    activePolicyHash: null,
+    createdAt: NOW,
+    updatedAt: NOW
+  };
+  assert.equal(ProjectSchema.parse(project).repositoryUrl, "https://github.com/vedant817/donebond");
+  for (const changed of [
+    { slug: "has_underscore" },
+    { slug: "A-capital" },
+    { repositoryUrl: "http://github.com/Vedant817/donebond" },
+    { repositoryUrl: "https://gitlab.com/Vedant817/donebond" },
+    { defaultBranch: "-main" },
+    { defaultBranch: "../main" },
+    { defaultBranch: "main.lock" }
+  ]) {
+    assert.equal(ProjectSchema.safeParse({ ...project, ...changed }).success, false);
+  }
+});
 
 test("parses and normalizes a complete task", () => {
   const task = TaskSchema.parse({

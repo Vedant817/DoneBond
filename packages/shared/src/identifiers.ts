@@ -28,4 +28,8 @@ export const PublicIdentifierSchema = z
   .max(128)
   .transform(normalizePublicIdentifier);
 
-export const ProjectSlugSchema = PublicIdentifierSchema;
+export const ProjectSlugSchema = z
+  .string()
+  .min(1)
+  .max(63)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u, "Expected normalized lowercase kebab-case");

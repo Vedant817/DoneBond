@@ -54,17 +54,20 @@ export interface CollectGitOptions {
 }
 
 async function git(cwd: string, args: readonly string[]): Promise<string> {
+  const environment: Record<string, string | undefined> = {
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_TERMINAL_PROMPT: "0",
+    HOME: process.env.HOME,
+    LC_ALL: "C",
+    PATH: process.env.PATH
+  };
   try {
     const result = await execFileAsync("git", args, {
       cwd,
       encoding: "utf8",
-      env: {
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_TERMINAL_PROMPT: "0",
-        HOME: process.env.HOME,
-        LC_ALL: "C",
-        PATH: process.env.PATH
-      },
+      // Next.js makes NODE_ENV mandatory in its ambient ProcessEnv declaration,
+      // while Git collection intentionally forwards only this restricted set.
+      env: environment as NodeJS.ProcessEnv,
       maxBuffer: MAX_GIT_OUTPUT,
       timeout: 10_000,
       windowsHide: true

@@ -5,13 +5,13 @@ import { PublicIdentifierSchema, ProjectSlugSchema } from "./identifiers.js";
 import {
   Bytes32Schema,
   DecimalWeiSchema,
+  GitHubRepositoryUrlSchema,
   GitObjectIdSchema,
   HexSignatureSchema,
   IsoDateTimeSchema,
   NonZeroEthereumAddressSchema,
   NormalizedTextSchema,
   RepositoryIdentitySchema,
-  SafeRepositoryUrlSchema,
   Uint64StringSchema
 } from "./primitives.js";
 
@@ -19,7 +19,27 @@ export const DOMAIN_SCHEMA_VERSION = 1 as const;
 export const EVIDENCE_SCHEMA_VERSION = 1 as const;
 
 export const SupportedChainIdSchema = z.union([z.literal(143), z.literal(10_143)]);
-const BranchNameSchema = z.string().trim().min(1).max(255);
+export const BranchNameSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine((value) => {
+    const components = value.split("/");
+    return (
+      value === value.trim() &&
+      !value.startsWith("-") &&
+      !value.startsWith("/") &&
+      !value.endsWith("/") &&
+      !value.endsWith(".") &&
+      !value.includes("..") &&
+      !value.includes("@{") &&
+      !/[\x00-\x20\x7f~^:?*[\\]/u.test(value) &&
+      components.every(
+        (component) =>
+          component.length > 0 && !component.startsWith(".") && !component.endsWith(".lock")
+      )
+    );
+  }, "Expected a safe Git branch name");
 const normalizedText = (maximum: number) => NormalizedTextSchema.pipe(z.string().max(maximum));
 
 function rejectDuplicateCriteria(
@@ -40,7 +60,7 @@ export const ProjectSchema = z.strictObject({
   publicId: PublicIdentifierSchema,
   slug: ProjectSlugSchema,
   name: normalizedText(120),
-  repositoryUrl: SafeRepositoryUrlSchema,
+  repositoryUrl: GitHubRepositoryUrlSchema,
   defaultBranch: BranchNameSchema,
   visibility: ProjectVisibilitySchema,
   status: ProjectStatusSchema,
@@ -83,7 +103,7 @@ const TaskObjectSchema = z.strictObject({
   chainTaskId: DecimalWeiSchema.nullable(),
   title: normalizedText(200),
   description: normalizedText(20_000),
-  repositoryUrl: SafeRepositoryUrlSchema,
+  repositoryUrl: GitHubRepositoryUrlSchema,
   targetBranch: BranchNameSchema,
   baseCommit: GitObjectIdSchema.nullable(),
   acceptanceCriteria: z.array(AcceptanceCriterionSchema).min(1).max(100),

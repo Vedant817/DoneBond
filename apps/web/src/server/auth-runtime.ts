@@ -3,12 +3,14 @@ import {
   createWalletAuthAdapters,
   DoneBondRepository,
   DrizzleAuthRateLimiter,
-  DrizzleCliTokenRepository
+  DrizzleCliTokenRepository,
+  DrizzleProjectPolicyRepository
 } from "@donebond/db";
 
 import { createAuthHandlers, type RequestRateLimiter } from "./auth-handlers.ts";
 import { validateCliTokenSecret } from "./cli-token.ts";
 import { correlationId, errorResponse } from "./http.ts";
+import { DurableProjectWriteRateLimiter } from "./project-write-rate-limiter.ts";
 import { WalletAuthService } from "./wallet-auth.ts";
 
 let handlers: ReturnType<typeof createAuthHandlers> | undefined;
@@ -24,6 +26,8 @@ let cliTokenRevokeGlobalLimiter: RequestRateLimiter | undefined;
 let cliTokenRevokeSubjectLimiter: RequestRateLimiter | undefined;
 let runtimeApplicationOrigin: string | undefined;
 let runtimeCliTokenSecret: string | undefined;
+let projectPolicyRepository: DrizzleProjectPolicyRepository | undefined;
+let projectWriteRateLimiter: DurableProjectWriteRateLimiter | undefined;
 
 type AuthHandler = keyof ReturnType<typeof createAuthHandlers>;
 
@@ -83,6 +87,7 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
   walletAuthService = auth;
   projectRepository = new DoneBondRepository(databaseHandle.db);
   cliTokenRepository = new DrizzleCliTokenRepository(databaseHandle.db);
+  projectPolicyRepository = new DrizzleProjectPolicyRepository(databaseHandle.db);
   runtimeApplicationOrigin = canonicalOrigin;
   runtimeCliTokenSecret = cliTokenSecret;
   cliTokenGlobalLimiter = maintainedLimiter(
@@ -127,6 +132,72 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
       windowMs: 10 * 60 * 1000
     })
   );
+  projectWriteRateLimiter = new DurableProjectWriteRateLimiter(cliTokenSecret, {
+    project_create: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "project_create_global",
+          maxAttempts: 300,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "project_create_user",
+          maxAttempts: 20,
+          windowMs: 10 * 60 * 1000
+        })
+      )
+    },
+    project_update: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "project_update_global",
+          maxAttempts: 600,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "project_update_subject",
+          maxAttempts: 120,
+          windowMs: 10 * 60 * 1000
+        })
+      )
+    },
+    policy_save: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "policy_save_global",
+          maxAttempts: 300,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "policy_save_subject",
+          maxAttempts: 30,
+          windowMs: 10 * 60 * 1000
+        })
+      )
+    },
+    policy_activate: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "policy_activate_global",
+          maxAttempts: 1200,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "policy_activate_subject",
+          maxAttempts: 300,
+          windowMs: 10 * 60 * 1000
+        })
+      )
+    }
+  });
   handlers = createAuthHandlers({
     applicationOrigin: canonicalOrigin,
     auth,
@@ -215,6 +286,35 @@ export function getProjectAuthorizationServices(): {
     throw new TypeError("Project authorization services failed to initialize");
   }
   return { authenticator: walletAuthService, accessStore: projectRepository };
+}
+
+export function getProjectPolicyServices(): {
+  readonly applicationOrigin: string;
+  readonly resourceSecret: string;
+  readonly auth: WalletAuthService;
+  readonly accessStore: DoneBondRepository;
+  readonly repository: DrizzleProjectPolicyRepository;
+  readonly rateLimiter: DurableProjectWriteRateLimiter;
+} {
+  getAuthHandlers();
+  if (
+    runtimeApplicationOrigin === undefined ||
+    runtimeCliTokenSecret === undefined ||
+    walletAuthService === undefined ||
+    projectRepository === undefined ||
+    projectPolicyRepository === undefined ||
+    projectWriteRateLimiter === undefined
+  ) {
+    throw new TypeError("Project and policy services failed to initialize");
+  }
+  return {
+    applicationOrigin: runtimeApplicationOrigin,
+    resourceSecret: runtimeCliTokenSecret,
+    auth: walletAuthService,
+    accessStore: projectRepository,
+    repository: projectPolicyRepository,
+    rateLimiter: projectWriteRateLimiter
+  };
 }
 
 export async function dispatchAuthRequest(

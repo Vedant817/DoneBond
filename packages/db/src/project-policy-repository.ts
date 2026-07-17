@@ -1,4 +1,4 @@
-import { SafeRepositoryUrlSchema } from "@donebond/shared";
+import { GitHubRepositoryUrlSchema } from "@donebond/shared";
 import { and, desc, eq, lt, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
@@ -162,7 +162,7 @@ function assertNormalizedText(value: string, label: string, maximum: number): vo
 }
 
 function assertRepositoryUrl(value: string): void {
-  const parsed = SafeRepositoryUrlSchema.safeParse(value);
+  const parsed = GitHubRepositoryUrlSchema.safeParse(value);
   if (!parsed.success) throw invalid("Repository URL is invalid or contains credentials");
   const url = new URL(value);
   if (url.search !== "" || url.hash !== "") {

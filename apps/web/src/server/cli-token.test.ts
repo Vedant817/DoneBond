@@ -7,6 +7,7 @@ import {
   bearerCliToken,
   CliTokenAuthenticator,
   cliTokenDigest,
+  deriveOpaquePublicId,
   generateCliToken,
   generateOpaquePublicId,
   safeRequestHeaders,
@@ -49,6 +50,15 @@ test("opaque public IDs match persisted constraints without collisions in a samp
     assert.match(identifier, /^[0-9a-hjkmnp-tv-z]{26}$/u);
     assert.match(identifier[0] ?? "", /^[0-7]$/u);
   }
+});
+
+test("keyed public IDs are retry-stable and domain-separated", () => {
+  const components = ["user-id", "project_create", "idempotency-key"];
+  const first = deriveOpaquePublicId(SECRET, "project", components);
+  assert.equal(deriveOpaquePublicId(SECRET, "project", components), first);
+  assert.notEqual(deriveOpaquePublicId(SECRET, "policy", components), first);
+  assert.notEqual(deriveOpaquePublicId(SECRET, "project", [...components, "changed"]), first);
+  assert.match(first, /^[0-9a-hjkmnp-tv-z]{26}$/u);
 });
 
 test("safe request headers redact credentials and omit attacker-controlled headers", () => {

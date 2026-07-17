@@ -247,11 +247,11 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 4.4 Projects and policies API
 
-- [ ] Project CRUD.
-- [ ] Policy upload/validation/canonicalization.
-- [ ] Policy activation/version history.
-- [ ] Repository metadata validation.
-- [ ] Idempotent writes and stable errors.
+- [x] Project CRUD.
+- [x] Policy upload/validation/canonicalization.
+- [x] Policy activation/version history.
+- [x] Repository metadata validation.
+- [x] Idempotent writes and stable errors.
 
 ## 4.5 Tasks API
 
@@ -761,3 +761,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: The independent CLI secret is canonical unpadded base64url with at least 32 decoded bytes. Credential material, public IDs, stored digests, and rate keys use separate HMAC domains. Plaintext never enters repository, idempotency, audit, or safe-header data. Global rate limits execute before attacker-controlled subject keys; owner/project subject limits execute only after authorization. Creation and revocation quotas are separated so creation traffic cannot consume emergency-revocation capacity.
 - Remaining risks/blockers: Actual PostgreSQL migration/concurrency execution remains blocked by the unavailable disposable database. Deployment should add edge/IP abuse controls; fixed-window `429` responses do not yet include `Retry-After`. Token-management UI remains task 6.3. Public endpoint field allowlisting remains task 4.2/4.7.
 - Commit: API/security integration `554b263d39dfee94827b0c2da2a19105a71090bc`; DB persistence integration `2171c40`.
+
+## 2026-07-17 14:19 IST — Database engineer + Codex/integrator + independent security reviewer — 4.4
+- Branch/worktree: DB implementation/remediation on `feat/project-policy-repository`, integrated and route-wired on `main`; independent read-only falsification and remediation review.
+- Summary: Delivered membership-scoped project create/list/detail/update/archive and immutable policy upload/history/detail/activation APIs. Strict shared schemas canonicalize GitHub repository identity and Git branch metadata; server-side duplicate-safe policy parsing computes RFC 8785/Keccak commitments and never trusts client hashes. Owner writes enforce origin, CSRF, durable global/subject quotas, HMAC-derived retry-stable public IDs, typed idempotency, transactional audits, archived-state rules, and repository immutability after the first task. Public DTOs omit internal IDs and raw YAML.
+- Files changed: `packages/shared` project/error schemas and tests; `packages/evidence` web-consumer ProcessEnv compatibility; `packages/db` project/policy repository, idempotency response snapshots, timestamp/source-path constraints, migrations, and deterministic/guarded tests; `apps/web` input schemas, handlers, DB adapter, rate-limit adapter, routes, and tests; API/environment documentation, CLI normalization regression, manifest, and tracker.
+- Verification commands: shared/evidence/DB/web focused build/typecheck/tests; DB migration freshness generation; web production build; root format/lint/boundaries/typecheck/test/build; dependency audit; history secret scan; `git diff --check`; two independent adversarial review rounds with temporal retry, sub-millisecond pagination, branch, path, authorization, data-leak, and rate-limit probes.
+- Results: Shared passed 16/16, evidence 36/36, DB 60/60 deterministic tests with one guarded live-PostgreSQL test skipped, web 47/47, and CLI 22/22 after updating the expected canonical GitHub URL. All project/policy routes compile as dynamic Node routes. The first review found a HIGH temporal idempotency defect plus pagination/branch issues; response snapshots, SQL keysets, millisecond timestamp precision, and stricter validation were added. Re-review reproduced each correction and reports no remaining critical/high/medium finding. Dependency audit reports no known vulnerabilities.
+- Security/privacy notes: Idempotency rows store strict allowlisted safe response snapshots/status, never internal UUIDs, raw YAML, canonical policy payloads, or credentials; policy replay rehydrates canonical JSON only from the immutable project-bound policy row after owner authorization. SQL pagination is bounded to 100 and uses `(created_at, public_id)` keysets. Create/update/policy/activation quotas use separate HMACed durable scopes. Private repositories and canonical policies remain member-only.
+- Remaining risks/blockers: The guarded migration/concurrency/temporal PostgreSQL test could not run because no Docker/PostgreSQL daemon or `TEST_DATABASE_URL` is available. The exported legacy `DoneBondRepository.createProject` has no production caller and lacks response-snapshot semantics; production web code uses only `DrizzleProjectPolicyRepository`, and the legacy method should be delegated or removed before any future service adopts it. Fixed-window `429` responses still omit `Retry-After` and deployment should add edge/IP controls.
+- Commit: pending verified integration commit; DB foundation `4a29bb2`, response-snapshot/keyset remediation `da3b61e`.

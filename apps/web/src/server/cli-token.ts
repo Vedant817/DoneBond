@@ -113,6 +113,23 @@ export function cliTokenRateKey(secret: string, scope: string): string {
     .digest("hex");
 }
 
+export function deriveOpaquePublicId(
+  secret: string,
+  namespace: string,
+  components: readonly string[]
+): string {
+  if (!/^[a-z][a-z0-9.-]{0,63}$/u.test(namespace) || components.length === 0) {
+    throw new TypeError("Opaque public ID derivation scope is invalid");
+  }
+  const material = createHmac("sha256", key(secret))
+    .update("donebond.public-id.v1\0", "utf8")
+    .update(namespace, "utf8")
+    .update("\0", "utf8")
+    .update(JSON.stringify(components), "utf8")
+    .digest();
+  return encodeOpaquePublicId(material);
+}
+
 export function bearerCliToken(authorizationHeader: string | null): string {
   if (authorizationHeader === null) {
     throw new HttpError(ERROR_CODES.AUTH_REQUIRED, "A valid CLI token is required", 401);

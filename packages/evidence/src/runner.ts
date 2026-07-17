@@ -69,10 +69,10 @@ function createEnvironment(
   globalAllowlist: readonly string[],
   checkAllowlist: readonly string[],
   source: Readonly<Record<string, string | undefined>>
-): NodeJS.ProcessEnv {
+): Record<string, string | undefined> {
   const selected = checkAllowlist.length === 0 ? globalAllowlist : checkAllowlist;
   const allowed = new Set(globalAllowlist);
-  const environment: NodeJS.ProcessEnv = {};
+  const environment: Record<string, string | undefined> = {};
   for (const key of selected) {
     if (!allowed.has(key)) {
       throw new EvidenceError(
@@ -165,7 +165,9 @@ export async function runCheck(
     const child = spawn(check.executable, check.args, {
       cwd: workingDirectory,
       detached: process.platform !== "win32",
-      env: environment,
+      // Next.js makes NODE_ENV mandatory in its ambient ProcessEnv declaration,
+      // while the evidence sandbox intentionally omits every non-allowlisted key.
+      env: environment as NodeJS.ProcessEnv,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true
