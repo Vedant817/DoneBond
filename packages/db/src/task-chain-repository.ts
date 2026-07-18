@@ -4,7 +4,7 @@ import {
   TaskSchema,
   type CanonicalTaskV1
 } from "@donebond/shared";
-import { and, desc, eq, lt, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lt, ne, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { DatabaseServiceError, translateDatabaseError } from "./errors.js";
@@ -211,6 +211,12 @@ export interface ReceiptChainReconciliationContext {
   readonly attestationExpiryUnixSeconds: string;
   readonly verifierAddress: string;
   readonly typedDataDigest: string;
+}
+
+export interface PendingReconciliationTransaction {
+  readonly transactionPublicId: string;
+  readonly actorUserId: string;
+  readonly intentType: "create_task" | "submit_receipt";
 }
 
 export interface ConfirmReceiptSubmittedInput {
@@ -1824,6 +1830,41 @@ export class DrizzleTaskRepository {
           transaction: await this.chainView(transaction, chainTransaction, row.task.publicId)
         };
       });
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  /**
+   * Returns a bounded, oldest-first work queue for the trusted reconciliation
+   * job. Only transaction types with exact receipt/event reconcilers are
+   * eligible; prepared and wallet-requested intents have no broadcast hash and
+   * are deliberately excluded.
+   */
+  public async listPendingReconciliationTransactions(
+    limit = 50
+  ): Promise<readonly PendingReconciliationTransaction[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw invalid("Reconciliation limit must be an integer between 1 and 100");
+    }
+    try {
+      const rows = await this.database
+        .select({
+          transactionPublicId: chainTransactions.publicId,
+          actorUserId: chainTransactions.userId,
+          intentType: chainTransactions.intentType
+        })
+        .from(chainTransactions)
+        .where(
+          and(
+            inArray(chainTransactions.status, ["submitted", "unknown_reconcile"]),
+            inArray(chainTransactions.intentType, ["create_task", "submit_receipt"]),
+            isNotNull(chainTransactions.transactionHash)
+          )
+        )
+        .orderBy(asc(chainTransactions.updatedAt), asc(chainTransactions.id))
+        .limit(limit);
+      return rows as readonly PendingReconciliationTransaction[];
     } catch (error) {
       throw translateDatabaseError(error);
     }

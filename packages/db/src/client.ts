@@ -1,4 +1,5 @@
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { sql as drizzleSql } from "drizzle-orm";
 import postgres, { type Sql } from "postgres";
 
 import { parseDatabaseEnvironment, type DatabaseEnvironment } from "./env.js";
@@ -17,7 +18,9 @@ export function buildPostgresOptions(
     connect_timeout: environment.DATABASE_CONNECT_TIMEOUT_SECONDS,
     idle_timeout: environment.DATABASE_IDLE_TIMEOUT_SECONDS,
     max: environment.DATABASE_MAX_CONNECTIONS,
-    prepare: true,
+    // Supavisor transaction pooling (the recommended Vercel connection mode)
+    // cannot retain session-scoped prepared statements between requests.
+    prepare: false,
     ssl:
       environment.DATABASE_SSL === "require"
         ? {
@@ -38,4 +41,16 @@ export function createDatabase(
     environment,
     close: async () => sql.end({ timeout: 5 })
   };
+}
+
+export async function checkDatabaseHealth(
+  environmentSource: Record<string, string | undefined> = process.env
+): Promise<boolean> {
+  const database = createDatabase(environmentSource);
+  try {
+    await database.db.execute(drizzleSql`select 1`);
+    return true;
+  } finally {
+    await database.close();
+  }
 }

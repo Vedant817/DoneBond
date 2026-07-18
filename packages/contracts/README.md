@@ -56,10 +56,12 @@ Fund the printed address with test MON, then deploy from this package directory.
 the keystore password without exposing the private key:
 
 ```bash
+export DEPLOYER_ACCOUNT=donebond-deployer
 export VERIFIER_ADDRESS=0xYourPassingEvidenceVerifier
+pnpm deploy:preflight
 forge script script/DeployDoneBondRegistry.s.sol:DeployDoneBondRegistry \
-  --account donebond-deployer --rpc-url monad_testnet --broadcast
-unset VERIFIER_ADDRESS
+  --account "$DEPLOYER_ACCOUNT" --rpc-url monad_testnet --broadcast
+unset DEPLOYER_ACCOUNT VERIFIER_ADDRESS
 ```
 
 Add `--verify` only after setting the explorer variables documented in the repository environment

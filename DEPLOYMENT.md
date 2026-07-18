@@ -36,7 +36,7 @@ Reconfirmed against the official Monad Developer Portal and network changelog on
 2026-07-17:
 
 - chain ID: `10143`;
-- public RPC: `https://rpc.testnet.monad.xyz`;
+- public RPC: `https://testnet-rpc.monad.xyz`;
 - explorer: `https://testnet.monadscan.com`;
 - native symbol: `MON`.
 
@@ -64,8 +64,19 @@ environment.
    - Git commit.
 8. Execute the live smoke sequence using small testnet values.
 
+### Current Monad Testnet deployment
+
+- Registry: [`0xBe6C3E212626C31a5152545C7089f3e86D65eACA`](https://testnet.monadscan.com/address/0xBe6C3E212626C31a5152545C7089f3e86D65eACA)
+- Deployment transaction: [`0x79a676bd…92b317`](https://testnet.monadscan.com/tx/0x79a676bde5bb1f697a155ccd5aee1d73575de666d63599b97950c386ae92b317)
+- Block: `46100174`
+- Source verification: Sourcify `exact_match`
+- Machine-readable release record: `deployments/monad-testnet.json`
+
 ## Database deployment
 
+- Use Supabase's Supavisor transaction-pooler URI for the Vercel `DATABASE_URL`;
+  the runtime disables session-scoped prepared statements for compatibility.
+- Use the direct database URI only for the controlled migration release step.
 - Review generated migrations.
 - Back up production data before destructive changes.
 - Run migrations as a dedicated release step, not implicitly from every web process.
@@ -91,6 +102,12 @@ For the MVP, a lightweight scheduled reconciliation job is sufficient if reliabl
 - update confirmed/reverted/replaced/unknown state idempotently;
 - retry transient RPC failures with bounded exponential backoff;
 - do not mark a transaction failed solely on timeout.
+
+Production schedules `/api/v1/cron/reconcile` once daily through
+`apps/web/vercel.json`, which is compatible with Vercel Hobby. The route requires
+`Authorization: Bearer $CRON_SECRET`; use a random secret of at least 32
+characters. Pro deployments may safely increase the schedule frequency because
+processing is bounded and idempotent.
 
 ## Release smoke test
 

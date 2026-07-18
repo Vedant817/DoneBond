@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "network": "monad-testnet",
+  "chainId": 10143,
+  "contractName": "DoneBondRegistry",
+  "contractAddress": "0xBe6C3E212626C31a5152545C7089f3e86D65eACA",
+  "verifierAddress": "0xBcd0D70190357c0FFD8E81A9039FC306afBBA44F",
+  "deployerAddress": "0xdaDf75A65317664c39F0C21b718F1E5E94876302",
+  "deploymentTransaction": "0x79a676bde5bb1f697a155ccd5aee1d73575de666d63599b97950c386ae92b317",
+  "deploymentBlock": 46100174,
+  "deployedAt": "2026-07-18T22:28:17Z",
+  "compiler": {
+    "version": "0.8.30",
+    "optimizer": true,
+    "optimizerRuns": 200,
+    "evmVersion": "osaka",
+    "bytecodeHash": "ipfs"
+  },
+  "abi": {
+    "path": "packages/contracts/abi/DoneBondRegistry.json",
+    "sha256": "587f3c62d9c0b4ecc1d74663d74e81b598e35375d736086fff82ca2b39ff5a33"
+  },
+  "source": {
+    "path": "packages/contracts/src/DoneBondRegistry.sol",
+    "sha256": "d3bef954e5fde487288acad6ee950f48d40ee7189c7a074461c5f596ce7ede8f",
+    "gitCommit": "be9c43b7a9437d00a72eebbc968de8823bfdd128"
+  },
+  "verification": {
+    "provider": "sourcify",
+    "result": "exact_match",
+    "jobId": "470d9d71-73b7-41a9-b173-a163a0274119",
+    "explorerUrl": "https://testnet.monadvision.com/address/0xBe6C3E212626C31a5152545C7089f3e86D65eACA?tab=Contract"
+  },
+  "explorerUrl": "https://testnet.monadscan.com/address/0xBe6C3E212626C31a5152545C7089f3e86D65eACA"
+}

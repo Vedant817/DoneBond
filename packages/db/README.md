@@ -22,6 +22,11 @@ pnpm --filter @donebond/db build
 pnpm --filter @donebond/db db:migrate
 ```
 
+For the deployed Vercel application, use Supabase's IPv4-compatible Supavisor
+transaction-pooler URI (normally port 6543) instead. The runtime disables
+session-scoped prepared statements so transaction pooling remains safe; keep the
+direct URI restricted to migration/release tooling.
+
 Run migrations against a separate test project/database before running
 integration tests. Never point local commands at a production URL. Supabase
 requires TLS; `DATABASE_SSL=require` is this project's default and must stay

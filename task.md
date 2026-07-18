@@ -209,10 +209,10 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 ## 3.5 Testnet deployment
 
 - [x] Confirm current official Monad Testnet chain configuration.
-- [ ] Fund a dedicated deployment wallet with test MON.
-- [ ] Deploy contract.
-- [ ] Verify source code in supported explorer.
-- [ ] Record address, transaction, chain ID, compiler, optimizer, ABI, and deployment commit.
+- [x] Fund a dedicated deployment wallet with test MON.
+- [x] Deploy contract.
+- [x] Verify source code in supported explorer.
+- [x] Record address, transaction, chain ID, compiler, optimizer, ABI, and deployment commit.
 - [ ] Perform live smoke calls: create task, submit receipt, approve, withdraw.
 
 **Integration checkpoint 3:** ABI and address are versioned before web transaction work begins.
@@ -503,7 +503,7 @@ Explicitly out of scope, left for milestone 4.8 per its own listed checklist: fu
 
 - [ ] Structured logs and correlation IDs.
 - [ ] Metrics for validation failures, API errors, pending transactions, and event lag.
-- [ ] Health endpoint that checks dependencies safely.
+- [x] Health endpoint that checks dependencies safely.
 - [ ] Timeouts and retries with jitter for external calls.
 - [ ] No sensitive evidence in logs.
 
@@ -857,3 +857,11 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Verification: Formatting, lint/boundaries, workspace typecheck, 23 CLI tests, 97 web tests, 73 deterministic DB tests (plus the live PostgreSQL test), 36 evidence tests, 28 UI tests, 16 shared tests, 32 Foundry adversarial/fuzz/invariant tests, production build, three Playwright browser smoke tests, production dependency audit, history secret scan, and diff checks pass.
 - Local chain smoke: Deployed the reviewed registry to a local Anvil chain configured with Monad Testnet chain ID `10143` and the configured verifier, proving the deployment script and constructor path. This is local verification only and is not represented as a public Monad deployment.
 - Remaining external blockers: Public Monad deployment/source verification and hosted web/database release still require a dedicated funded deployer wallet, reachable public RPC/DNS, hosting/database credentials, and final public URLs. The in-app browser control surface returned no available browser instance; Playwright exercised the rendered desktop/mobile and public-error states instead.
+
+## 2026-07-19 — Codex — public testnet deployment and production recovery
+
+- Summary: Confirmed the public Monad Testnet deployment at `0xBe6C3E212626C31a5152545C7089f3e86D65eACA`, verified its source through Monad's Sourcify endpoint with an exact/full match, versioned the complete deployment record, configured the web app with the public address and block, added a dependency-aware health route, and implemented a bearer-protected bounded Vercel reconciliation job for pending task-creation and receipt-submission transactions.
+- Onchain evidence: Deployment transaction `0x79a676bde5bb1f697a155ccd5aee1d73575de666d63599b97950c386ae92b317` succeeded at block `46100174`; runtime bytecode is present; `verifier()` returns `0xBcd0D70190357c0FFD8E81A9039FC306afBBA44F`; `nextTaskId()` returns `1`. Browser verification on MonadVision shows “Contract Source Code Verified (Full Match),” `DoneBondRegistry`, optimizer `200`, and Osaka EVM.
+- Reliability/security: Cron authorization uses constant-time exact bearer comparison and fails closed for missing/short secrets. Work is limited to 50 oldest eligible rows, excludes unbroadcast intents and unsupported lifecycle actions, reuses exact event-binding reconcilers, continues after per-row failures, and is safe to retry. Vercel's once-daily Hobby-compatible schedule is documented; immediate post-broadcast reconciliation remains the primary path.
+- Verification: Full `pnpm verify` passes, including format, lint/boundaries, all workspace typechecks/tests, 32 Foundry tests, production build with `/api/v1/health` and `/api/v1/cron/reconcile`, and 3/3 Playwright E2E tests. Focused post-hardening results are DB 74/75 (one guarded live-Postgres test skipped without `TEST_DATABASE_URL`) and web 102/102.
+- Remaining external blockers: Production Supabase still needs a reachable pooled app URL/direct migration URL and migrations; Vercel is not linked/authenticated in this workspace and still needs production environment variables including a new 32+ character `CRON_SECRET`, final `NEXT_PUBLIC_APP_URL`, and deployment. The live create → receipt → approve → withdraw smoke sequence is not performed because it requires user wallet signatures and production database state.

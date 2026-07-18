@@ -36,6 +36,7 @@ test("TLS configuration is certificate-verified and supports a private CA", () =
   });
   const options = buildPostgresOptions(environment);
   assert.deepEqual(options.ssl, { ca: "test-private-ca", rejectUnauthorized: true });
+  assert.equal(options.prepare, false, "must remain compatible with transaction poolers");
 
   const local = parseDatabaseEnvironment({
     DATABASE_URL: "postgresql://127.0.0.1/donebond",

@@ -59,7 +59,7 @@ pnpm donebond task pull <task-id>
 pnpm donebond verify
 pnpm donebond submit
 pnpm donebond receipt verify <receipt-id> \
-  --api-url https://your-app.example --rpc-url https://rpc.testnet.monad.xyz
+  --api-url https://your-app.example --rpc-url https://testnet-rpc.monad.xyz
 ```
 
 `receipt verify` downloads the public canonical bundle, recomputes the evidence hash, recovers the immutable verifier signature, reads the registry state, and validates the exact `ReceiptSubmitted` event through the independently selected RPC.
@@ -87,6 +87,11 @@ TEST_DATABASE_URL=postgresql://... DONEBOND_ALLOW_DATABASE_RESET=test-only-confi
 - CLI: TypeScript with strict local parsing and shell-free process execution
 - Tests: Node.js built-in test runner, Foundry, Playwright
 - Deployment: Vercel for web/API, Supabase Postgres, Monad Testnet first
+
+The current verified Monad Testnet registry is
+[`0xBe6C3E212626C31a5152545C7089f3e86D65eACA`](https://testnet.monadscan.com/address/0xBe6C3E212626C31a5152545C7089f3e86D65eACA).
+Its public compiler, ABI, transaction, block, and source-verification metadata is
+versioned in [`deployments/monad-testnet.json`](deployments/monad-testnet.json).
 
 ## Non-negotiable constraints
 

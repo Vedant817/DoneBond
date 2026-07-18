@@ -26,8 +26,8 @@ export default defineConfig({
         process.env.CLI_TOKEN_SECRET ?? "Y2ktZGV0ZXJtaW5pc3RpYy1jbGktc2VjcmV0LTMyLWJ5dGVz",
       NEXT_PUBLIC_MONAD_CHAIN_ID: process.env.NEXT_PUBLIC_MONAD_CHAIN_ID ?? "10143",
       NEXT_PUBLIC_MONAD_RPC_URL:
-        process.env.NEXT_PUBLIC_MONAD_RPC_URL ?? "https://rpc.testnet.monad.xyz",
-      MONAD_RPC_URL: process.env.MONAD_RPC_URL ?? "https://rpc.testnet.monad.xyz",
+        process.env.NEXT_PUBLIC_MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz",
+      MONAD_RPC_URL: process.env.MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz",
       NEXT_PUBLIC_MONAD_EXPLORER_URL:
         process.env.NEXT_PUBLIC_MONAD_EXPLORER_URL ?? "https://testnet.monadscan.com",
       NEXT_PUBLIC_DONEBOND_CONTRACT_ADDRESS:

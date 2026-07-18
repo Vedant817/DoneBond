@@ -8,6 +8,7 @@
   "scripts": {
     "abi:check": "node scripts/check-abi.mjs",
     "build": "forge build",
+    "deploy:preflight": "bash scripts/preflight-deploy.sh",
     "format:check": "forge fmt --check",
     "test": "node --test test/scaffold.test.mjs && forge test",
     "test:contracts": "node scripts/check-abi.mjs && forge test"

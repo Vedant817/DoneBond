@@ -112,6 +112,13 @@ test("DrizzleTaskRepository rejects pagination outside 1..100 and malformed curs
   );
 });
 
+test("DrizzleTaskRepository bounds the trusted reconciliation work queue", async () => {
+  const repo = repository();
+
+  await assertInvalidInput(repo.listPendingReconciliationTransactions(0), "Reconciliation limit");
+  await assertInvalidInput(repo.listPendingReconciliationTransactions(101), "Reconciliation limit");
+});
+
 test("DrizzleTaskRepository rejects chain intent proposals with malformed identities or dates", async () => {
   const repo = repository();
 
