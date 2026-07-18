@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Executing arbitrary repository commands on hosted DoneBond infrastructure would create a remote-code-execution platform, require strong sandboxing, increase cost, and expand the hackathon scope. The target users already run coding agents and tests locally.
+Executing arbitrary repository commands on hosted DoneBond infrastructure would create a remote-code-execution platform, require strong sandboxing, increase cost, and expand the initial scope. The target users already run coding agents and tests locally.
 
 ## Decision
 

@@ -6,11 +6,15 @@ confirmed contract events remain authoritative for onchain lifecycle and funds.
 
 ## Local database
 
-Start an isolated development database (the volume is intentionally ephemeral):
+DoneBond uses a hosted Supabase Postgres project rather than a local Docker
+database. Create a project at https://supabase.com, then copy its direct
+connection string (Project Settings -> Database -> Connection string -> URI,
+port 5432, `db.<project-ref>.supabase.co` — use the direct connection, not the
+pooled one, so migrations can run DDL):
 
 ```bash
-docker compose -f packages/db/compose.yaml up -d --wait
 cp packages/db/.env.example packages/db/.env
+# edit packages/db/.env: paste the Supabase URI into DATABASE_URL
 set -a
 source packages/db/.env
 set +a
@@ -18,29 +22,33 @@ pnpm --filter @donebond/db build
 pnpm --filter @donebond/db db:migrate
 ```
 
-Run migrations against a separate test database before running integration tests.
-Never point local commands at a production URL. `DATABASE_SSL=require` is the
-default; the example explicitly disables TLS only for loopback development.
+Run migrations against a separate test project/database before running
+integration tests. Never point local commands at a production URL. Supabase
+requires TLS; `DATABASE_SSL=require` is this project's default and must stay
+that way for any non-loopback host — it can only be disabled for a literal
+loopback hostname (`localhost`/`127.0.0.1`/`::1`).
 
 The real-PostgreSQL integration test deliberately resets the `public` schema and
-therefore requires a database whose name ends in `_test` plus an explicit guard:
+therefore requires a database whose name ends in `_test` plus an explicit guard.
+Create a second, disposable Supabase project (or a separate database) for this —
+never point it at anything shared:
 
 ```bash
-TEST_DATABASE_URL=postgresql://donebond:donebond@127.0.0.1:5432/donebond_test \
-DATABASE_SSL=disable \
+TEST_DATABASE_URL=postgresql://postgres:<password>@db.<test-project-ref>.supabase.co:5432/postgres_test \
 DONEBOND_ALLOW_DATABASE_RESET=test-only-confirmed \
+DONEBOND_ALLOW_REMOTE_TEST_DATABASE=test-only-confirmed \
 pnpm --filter @donebond/db test:integration
 ```
 
-Without `TEST_DATABASE_URL`, the integration test is reported as skipped. A remote
-disposable database additionally requires
-`DONEBOND_ALLOW_REMOTE_TEST_DATABASE=test-only-confirmed`; production databases
-must never be used.
+Without `TEST_DATABASE_URL`, the integration test is reported as skipped.
+`DONEBOND_ALLOW_REMOTE_TEST_DATABASE` is required in addition to the reset guard
+because a Supabase host is never loopback; production databases must never be
+used regardless.
 
 To regenerate a migration after an intentional schema change:
 
 ```bash
-DATABASE_URL=postgresql://donebond:donebond@127.0.0.1:5432/donebond \
+DATABASE_URL=postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres \
   pnpm --filter @donebond/db db:generate
 ```
 

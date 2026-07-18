@@ -1,12 +1,10 @@
 # Contributing to DoneBond
 
-DoneBond is being built as a fresh solo hackathon project. External feedback and
-bug reports are welcome; code contributions may be accepted after the hackathon
-when ownership and eligibility constraints allow it.
+Contributions are welcome. Please open an issue first to discuss the change.
 
 ## Development expectations
 
-1. Read `AGENTS.md`, the relevant specification, and `task.md`.
+1. Read the relevant specification and `task.md`.
 2. Branch from the current integration branch and keep changes focused.
 3. Never commit credentials, evidence containing secrets, wallet material, or
    production environment values.

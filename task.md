@@ -27,7 +27,7 @@ A task is complete only when:
 
 # Milestone 0 — Repository safety and baseline
 
-## 0.1 Create a fresh hackathon repository
+## 0.1 Create a fresh repository
 
 - [!] Create a new empty repository owned by `Vedant817`. Local repository is fresh; GitHub repository creation is blocked because `Vedant817/donebond` does not exist and `github-personal` has no usable SSH key.
 - [x] Do not copy an earlier project’s `.git` directory or commit history.
@@ -56,7 +56,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 - [x] Add license, code of conduct if desired, contribution guide, and issue templates.
 - [x] Add `.gitignore`, `.editorconfig`, Node version file, and package manager declaration.
 - [x] Add `DECISIONS.md` or use ADRs for architectural changes.
-- [x] Record hackathon deadline and release checklist in the README.
+- [x] Record release checklist in the README.
 
 **Verification:** clean clone contains every operating document and no secrets.
 
@@ -374,7 +374,7 @@ Explicitly out of scope, left for milestone 4.8 per its own listed checklist: fu
 - [ ] Build portable package.
 - [ ] Test install from packed tarball in a clean temporary directory.
 - [ ] Document Node/runtime requirements.
-- [ ] Publish only if credentials and package name are ready; local `pnpm dlx` path is acceptable for the hackathon demo.
+- [ ] Publish only if credentials and package name are ready; local `pnpm dlx` path is acceptable for the demo.
 
 ---
 

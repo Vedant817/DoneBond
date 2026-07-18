@@ -16,7 +16,7 @@
 - Monad Testnet only
 - Preview URLs must not expose private evidence
 
-### Production hackathon environment
+### Production
 
 - Public web/API URL
 - Managed PostgreSQL
@@ -84,7 +84,7 @@ environment.
 
 ## Event reconciliation
 
-For the hackathon, a lightweight scheduled reconciliation job is sufficient if reliable:
+For the MVP, a lightweight scheduled reconciliation job is sufficient if reliable:
 
 - query pending transaction records;
 - fetch receipts and contract events;

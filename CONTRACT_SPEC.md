@@ -16,7 +16,7 @@ Use well-audited OpenZeppelin components where appropriate:
 - `Pausable` only if an operational pause is genuinely needed
 - `Ownable2Step` only for protocol-level administration, not task ownership
 
-Avoid upgradeability in the hackathon MVP. A small immutable contract is easier to audit, explain, and verify.
+Avoid upgradeability in the initial MVP. A small immutable contract is easier to audit, explain, and verify.
 
 ## Data model
 

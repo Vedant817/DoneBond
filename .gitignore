@@ -36,3 +36,13 @@ broadcast/
 # DoneBond local credentials and generated evidence
 .donebond/
 donebond-evidence-*.json
+
+# Agent session files (not for public repository)
+.claude/
+AGENTS.md
+CLAUDE.md
+CODEX.md
+OPENCODE.md
+STARTING_PROMPT.md
+SUBAGENT_PLAYBOOK.md
+CHECKPOINT_*.md

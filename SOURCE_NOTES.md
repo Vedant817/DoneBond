@@ -2,22 +2,6 @@
 
 These are external references used to shape the build plan. Re-check current values and instructions before deployment because network endpoints and tooling can change.
 
-## Spark hackathon
-
-- Overview: https://buildanything.so/hackathons/spark?tab=overview
-- Rules: https://buildanything.so/hackathons/spark?tab=rules
-- FAQ/schedule/resources are available through the same hackathon page tabs.
-
-Key constraints reflected in this kit:
-
-- new solo project;
-- meaningful Monad Mainnet/Testnet component;
-- public GitHub repository;
-- hosted working application;
-- public demo video under three minutes;
-- real, non-placeholder functionality;
-- coding agents are allowed, but generated slop and suspicious history can hurt eligibility/judging.
-
 ## Monad
 
 - Documentation: https://docs.monad.xyz/
