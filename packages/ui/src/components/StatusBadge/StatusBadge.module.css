@@ -1,0 +1,59 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--db-space-1);
+  max-width: 100%;
+  border-radius: var(--db-radius-full);
+  border: 1px solid transparent;
+  padding: 0.15rem var(--db-space-3);
+  font-family: var(--db-font-sans);
+  font-size: var(--db-text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon {
+  flex-shrink: 0;
+}
+
+.success {
+  color: var(--db-color-success);
+  background: var(--db-color-success-bg);
+  border-color: var(--db-color-success-border);
+}
+
+.pending {
+  color: var(--db-color-pending);
+  background: var(--db-color-pending-bg);
+  border-color: var(--db-color-pending-border);
+}
+
+.warning {
+  color: var(--db-color-warning);
+  background: var(--db-color-warning-bg);
+  border-color: var(--db-color-warning-border);
+}
+
+.error {
+  color: var(--db-color-error);
+  background: var(--db-color-error-bg);
+  border-color: var(--db-color-error-border);
+}
+
+.critical {
+  color: var(--db-color-critical);
+  background: var(--db-color-critical-bg);
+  border-color: var(--db-color-critical-border);
+}
+
+.neutral {
+  color: var(--db-color-neutral);
+  background: var(--db-color-neutral-bg);
+  border-color: var(--db-color-neutral-border);
+}

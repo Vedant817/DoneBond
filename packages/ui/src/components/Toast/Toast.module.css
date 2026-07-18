@@ -1,0 +1,114 @@
+.viewport {
+  position: fixed;
+  bottom: var(--db-space-4);
+  right: var(--db-space-4);
+  left: var(--db-space-4);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--db-space-2);
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--db-space-2);
+  width: 100%;
+  max-width: 22rem;
+  box-sizing: border-box;
+  background: var(--db-color-surface-raised);
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-md);
+  box-shadow: var(--db-shadow-raised);
+  padding: var(--db-space-3) var(--db-space-3);
+  font-family: var(--db-font-sans);
+  font-size: var(--db-text-sm);
+  color: var(--db-color-text);
+  animation: toastIn var(--db-motion-base) var(--db-motion-easing);
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 0.15em;
+}
+
+.message {
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: var(--db-leading-normal);
+}
+
+.dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--db-color-text-subtle);
+  font-family: var(--db-font-sans);
+  font-size: var(--db-text-xs);
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--db-radius-sm);
+}
+
+.dismiss:hover {
+  color: var(--db-color-text);
+}
+
+.dismiss:focus-visible {
+  outline: none;
+  box-shadow: var(--db-focus-ring);
+}
+
+.toneSuccess {
+  color: var(--db-color-success);
+}
+
+.tonePending {
+  color: var(--db-color-pending);
+}
+
+.toneWarning {
+  color: var(--db-color-warning);
+}
+
+.toneError {
+  color: var(--db-color-error);
+}
+
+.toneCritical {
+  color: var(--db-color-critical);
+}
+
+.toneNeutral {
+  color: var(--db-color-neutral);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+@media (max-width: 24rem) {
+  .viewport {
+    align-items: stretch;
+  }
+
+  .toast {
+    max-width: 100%;
+  }
+}

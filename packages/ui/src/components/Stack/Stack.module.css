@@ -1,0 +1,53 @@
+.stack {
+  display: flex;
+  min-width: 0;
+}
+
+.directionColumn {
+  flex-direction: column;
+}
+
+.directionRow {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.alignStart {
+  align-items: flex-start;
+}
+
+.alignCenter {
+  align-items: center;
+}
+
+.alignEnd {
+  align-items: flex-end;
+}
+
+.alignStretch {
+  align-items: stretch;
+}
+
+.gap1 {
+  gap: var(--db-space-1);
+}
+
+.gap2 {
+  gap: var(--db-space-2);
+}
+
+.gap3 {
+  gap: var(--db-space-3);
+}
+
+.gap4 {
+  gap: var(--db-space-4);
+}
+
+.gap5 {
+  gap: var(--db-space-5);
+}
+
+.gap6 {
+  gap: var(--db-space-6);
+}

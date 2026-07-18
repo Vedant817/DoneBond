@@ -1,0 +1,46 @@
+.text {
+  margin: 0;
+  font-family: var(--db-font-sans);
+  line-height: var(--db-leading-normal);
+  color: var(--db-color-text-muted);
+  overflow-wrap: break-word;
+}
+
+.sizeXs {
+  font-size: var(--db-text-xs);
+}
+
+.sizeSm {
+  font-size: var(--db-text-sm);
+}
+
+.sizeBase {
+  font-size: var(--db-text-base);
+}
+
+.sizeMd {
+  font-size: var(--db-text-md);
+}
+
+.toneMuted {
+  color: var(--db-color-text-muted);
+}
+
+.toneSubtle {
+  color: var(--db-color-text-subtle);
+}
+
+.toneStrong {
+  color: var(--db-color-text);
+}
+
+.toneAccent {
+  color: var(--db-color-accent);
+}
+
+.eyebrow {
+  font-family: var(--db-font-mono);
+  letter-spacing: var(--db-tracking-wide);
+  text-transform: uppercase;
+  color: var(--db-color-accent);
+}

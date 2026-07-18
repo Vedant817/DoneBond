@@ -1,0 +1,30 @@
+.heading {
+  margin: 0;
+  font-family: var(--db-font-sans);
+  font-weight: 600;
+  letter-spacing: var(--db-tracking-tight);
+  line-height: var(--db-leading-tight);
+  color: var(--db-color-text);
+  overflow-wrap: break-word;
+}
+
+.level1 {
+  font-size: var(--db-text-2xl);
+}
+
+.level2 {
+  font-size: var(--db-text-xl);
+  letter-spacing: -0.03em;
+}
+
+.level3 {
+  font-size: var(--db-text-lg);
+  letter-spacing: -0.015em;
+  line-height: var(--db-leading-snug);
+}
+
+.level4 {
+  font-size: var(--db-text-md);
+  letter-spacing: var(--db-tracking-normal);
+  line-height: var(--db-leading-snug);
+}

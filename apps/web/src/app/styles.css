@@ -1,8 +1,10 @@
+@import "@donebond/ui/tokens.css";
+
 :root {
   color-scheme: dark;
-  background: #0c0e12;
-  color: #f4f5f7;
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  background: var(--db-color-bg);
+  color: var(--db-color-text);
+  font-family: var(--db-font-sans);
 }
 
 * {
@@ -17,32 +19,6 @@ main {
   display: grid;
   min-height: 100vh;
   align-content: center;
-  gap: 1rem;
   max-width: 50rem;
   padding: clamp(2rem, 8vw, 8rem);
-}
-
-h1,
-p {
-  margin: 0;
-}
-
-h1 {
-  font-size: clamp(2.5rem, 7vw, 5.5rem);
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-}
-
-p {
-  color: #b7bdc8;
-  font-size: 1.05rem;
-  line-height: 1.6;
-}
-
-.eyebrow {
-  color: #9de2b1;
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.8rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }

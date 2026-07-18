@@ -1,0 +1,25 @@
+.inline {
+  font-family: var(--db-font-mono);
+  font-size: 0.9em;
+  background: var(--db-color-surface-sunken);
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-sm);
+  padding: 0.05em 0.4em;
+  color: var(--db-color-text);
+  overflow-wrap: break-word;
+}
+
+.block {
+  display: block;
+  font-family: var(--db-font-mono);
+  font-size: var(--db-text-sm);
+  line-height: var(--db-leading-normal);
+  background: var(--db-color-surface-sunken);
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-md);
+  padding: var(--db-space-3) var(--db-space-4);
+  color: var(--db-color-text);
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre;
+}

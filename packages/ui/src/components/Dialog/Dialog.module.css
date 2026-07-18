@@ -1,0 +1,74 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--db-space-4);
+  background: rgba(4, 5, 7, 0.6);
+  animation: overlayIn var(--db-motion-base) var(--db-motion-easing);
+}
+
+.panel {
+  width: 100%;
+  max-width: min(28rem, 100%);
+  max-height: calc(100vh - 2 * var(--db-space-4));
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: var(--db-color-surface-raised);
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-lg);
+  box-shadow: var(--db-shadow-raised);
+  padding: var(--db-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--db-space-3);
+  animation: panelIn var(--db-motion-base) var(--db-motion-easing);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--db-font-sans);
+  font-size: var(--db-text-lg);
+  font-weight: 600;
+  color: var(--db-color-text);
+  letter-spacing: -0.015em;
+}
+
+.description {
+  margin: 0;
+  font-size: var(--db-text-base);
+  color: var(--db-color-text-muted);
+  line-height: var(--db-leading-normal);
+}
+
+.body {
+  min-width: 0;
+}
+
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .panel {
+    animation: none;
+  }
+}
