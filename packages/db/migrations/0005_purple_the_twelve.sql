@@ -23,11 +23,11 @@ ALTER TABLE "chain_transactions" ADD COLUMN "response_status" integer;--> statem
 ALTER TABLE "tasks" ADD COLUMN "canonical_json" jsonb NOT NULL;--> statement-breakpoint
 ALTER TABLE "tasks" ADD COLUMN "target_branch" varchar(255) NOT NULL;--> statement-breakpoint
 ALTER TABLE "tasks" ADD COLUMN "base_commit" varchar(64);--> statement-breakpoint
+ALTER TABLE "chain_transactions" ADD CONSTRAINT "chain_transactions_id_task_unique" UNIQUE("id","task_id");--> statement-breakpoint
+ALTER TABLE "evidence_bundles" ADD CONSTRAINT "evidence_id_task_unique" UNIQUE("id","task_id");--> statement-breakpoint
 ALTER TABLE "receipt_attestations" ADD CONSTRAINT "receipt_attestations_chain_transaction_task_fk" FOREIGN KEY ("chain_transaction_id","task_id") REFERENCES "public"."chain_transactions"("id","task_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "receipt_attestations" ADD CONSTRAINT "receipt_attestations_evidence_bundle_task_fk" FOREIGN KEY ("evidence_bundle_id","task_id") REFERENCES "public"."evidence_bundles"("id","task_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "receipt_attestations_task_idx" ON "receipt_attestations" USING btree ("task_id");--> statement-breakpoint
-ALTER TABLE "chain_transactions" ADD CONSTRAINT "chain_transactions_id_task_unique" UNIQUE("id","task_id");--> statement-breakpoint
-ALTER TABLE "evidence_bundles" ADD CONSTRAINT "evidence_id_task_unique" UNIQUE("id","task_id");--> statement-breakpoint
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_project_hash_unique" UNIQUE("project_id","task_hash");--> statement-breakpoint
 ALTER TABLE "chain_transactions" ADD CONSTRAINT "chain_transactions_response_complete" CHECK (("chain_transactions"."response_safe_json" is null and "chain_transactions"."response_status" is null) or ("chain_transactions"."response_safe_json" is not null and "chain_transactions"."response_status" between 200 and 299));--> statement-breakpoint
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_target_branch_safe" CHECK ("tasks"."target_branch" <> '' and "tasks"."target_branch" not like '-%' and "tasks"."target_branch" not like '/%' and "tasks"."target_branch" not like '%/' and "tasks"."target_branch" not like '.%' and "tasks"."target_branch" not like '%/.%' and "tasks"."target_branch" not like '%.lock' and "tasks"."target_branch" not like '%.lock/%' and "tasks"."target_branch" not like '%..%' and "tasks"."target_branch" not like '%@{%' and "tasks"."target_branch" not like '%//%' and "tasks"."target_branch" !~ '[[:cntrl:] ~^:?*]' and position(chr(92) in "tasks"."target_branch") = 0 and position('[' in "tasks"."target_branch") = 0);--> statement-breakpoint

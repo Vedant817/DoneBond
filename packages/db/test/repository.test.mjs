@@ -353,6 +353,7 @@ test("listEvidence returns nothing for an unknown task and paginates known evide
     publicId: `${publicId.slice(0, -1)}${suffix}`,
     taskPublicId: publicId,
     projectPublicId: publicId,
+    bundleJson: { schemaVersion: 1 },
     evidenceHash: hash,
     commitHashDerived: hash,
     gitObjectId: "a".repeat(40),

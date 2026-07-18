@@ -430,6 +430,71 @@ test("verify executes real checks and writes independently hashable passing evid
   assert.equal(evidence.task.taskHash, task.taskHash);
 });
 
+test("submit validates locally, uploads idempotently, and compares server commitments", async (context) => {
+  const { root, task } = await verificationFixture(0);
+  assert.equal(
+    await runCli(["verify", "--repo", root], {
+      stdout: captureStream().stream,
+      stderr: captureStream().stream,
+      environment: { PATH: process.env.PATH }
+    }),
+    ExitCode.Success
+  );
+  const configHome = await temporaryDirectory("donebond-submit-config-");
+  let requests = 0;
+  const api = await withApiServer(async (request, response) => {
+    requests += 1;
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    assert.equal(request.method, "POST");
+    assert.equal(request.headers.origin, api.url);
+    assert.match(
+      request.headers.idempotencyKey ?? request.headers["idempotency-key"],
+      /^evidence-/u
+    );
+    assert.equal(body.evidence.task.publicId, task.publicId);
+    response.statusCode = 201;
+    response.setHeader("content-type", "application/json");
+    response.end(
+      JSON.stringify({
+        evidence: {
+          publicId: "01arz3ndektsv4rrffq69g5fav",
+          taskPublicId: task.publicId,
+          projectPublicId: task.projectPublicId,
+          evidenceHash: body.evidence.result.passing
+            ? (await import("@donebond/evidence")).canonicalKeccak256(body.evidence)
+            : null,
+          commitHashDerived: body.evidence.git.derivedCommitHash,
+          passing: true
+        }
+      })
+    );
+  });
+  context.after(() => api.close());
+  await storeConnection(
+    await realpath(root),
+    {
+      apiUrl: api.url,
+      projectId: task.projectPublicId,
+      token: "dbt_test-only_submit_token_abcdefghijklmnopqrstuvwxyz"
+    },
+    { XDG_CONFIG_HOME: configHome }
+  );
+  const stdout = captureStream();
+  const stderr = captureStream();
+  const exitCode = await runCli(["submit", "--repo", root, "--json"], {
+    stdout: stdout.stream,
+    stderr: stderr.stream,
+    environment: { XDG_CONFIG_HOME: configHome, PATH: process.env.PATH }
+  });
+  assert.equal(exitCode, ExitCode.Success, stderr.value());
+  const result = JSON.parse(stdout.value());
+  assert.equal(result.taskPublicId, task.publicId);
+  assert.match(result.evidenceHash, /^0x[0-9a-f]{64}$/u);
+  assert.equal(requests, 1);
+});
+
 test("verify returns nonzero and still writes evidence for failed checks and dirty Git", async () => {
   const failed = await verificationFixture(2);
   assert.equal(

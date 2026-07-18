@@ -132,7 +132,7 @@ function fixture(options: { readonly boundProject?: string } = {}) {
         createdAt: new Date(NOW)
       };
       records.set(record.publicId, record);
-      details.set(record.publicId, { ...record, checks: [] });
+      details.set(record.publicId, { ...record, bundleJson: input.bundle, checks: [] });
       return record;
     },
     async listEvidence(taskPublicId, page) {

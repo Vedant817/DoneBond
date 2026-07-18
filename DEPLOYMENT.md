@@ -50,7 +50,7 @@ environment.
 
 1. Reconfirm current chain ID, RPC, explorer, faucet, and verification instructions from official Monad documentation.
 2. Create or use a dedicated deployment wallet with only required test MON.
-3. Store the private key in the local secret environment, never in files committed to Git.
+3. Store the deployer key in an encrypted Foundry keystore, never in files committed to Git or in shell history.
 4. Run contract tests, coverage, and security review.
 5. Deploy from the exact release commit.
 6. Verify source and constructor arguments.

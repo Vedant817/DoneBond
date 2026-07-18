@@ -863,6 +863,7 @@ export class DoneBondRepository {
           publicId: evidenceBundles.publicId,
           taskPublicId: tasks.publicId,
           projectPublicId: projects.publicId,
+          bundleJson: evidenceBundles.bundleJson,
           evidenceHash: evidenceBundles.evidenceHash,
           commitHashDerived: evidenceBundles.commitHashDerived,
           gitObjectId: evidenceBundles.gitObjectId,

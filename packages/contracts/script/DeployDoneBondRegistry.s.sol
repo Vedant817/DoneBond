@@ -6,11 +6,10 @@ import { DoneBondRegistry } from "../src/DoneBondRegistry.sol";
 
 /// @notice Broadcasts an immutable DoneBondRegistry deployment using a key supplied at runtime.
 contract DeployDoneBondRegistry is Script {
-    /// @notice Deploys using `DEPLOYER_PRIVATE_KEY` and the nonzero `VERIFIER_ADDRESS`.
+    /// @notice Deploys from Foundry's configured signer using the nonzero `VERIFIER_ADDRESS`.
     function run() external returns (DoneBondRegistry registry) {
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address verifier = vm.envAddress("VERIFIER_ADDRESS");
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
         registry = new DoneBondRegistry(verifier);
         vm.stopBroadcast();
     }

@@ -15,6 +15,7 @@
     "audit:prod": "pnpm audit --prod --audit-level=critical",
     "build": "turbo run build --filter=!@donebond/contracts",
     "db:migrate": "node --experimental-strip-types packages/db/src/migrate.ts",
+    "donebond": "pnpm --filter @donebond/cli build && node apps/cli/dist/index.js",
     "dev": "turbo run dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

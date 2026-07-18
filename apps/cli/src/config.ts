@@ -436,3 +436,52 @@ export async function authenticatedGetJson(
   }
   return readBoundedJson(response);
 }
+
+export async function authenticatedPostJson(
+  connection: ConnectionInput,
+  path: string,
+  body: unknown,
+  idempotencyKey: string,
+  fetchImplementation: typeof fetch = fetch
+): Promise<unknown> {
+  const endpoint = `${connection.apiUrl}${path}`;
+  const origin = new URL(connection.apiUrl).origin;
+  let lastStatus: number | undefined;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetchImplementation(endpoint, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${connection.token}`,
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+          origin
+        },
+        body: JSON.stringify(body),
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000)
+      });
+      if (response.ok) return readBoundedJson(response);
+      lastStatus = response.status;
+      if (response.status !== 429 && response.status < 500) break;
+    } catch (error) {
+      if (attempt === 2) {
+        throw new CliError(
+          "CONNECTION_FAILED",
+          "Could not reach the DoneBond API after three attempts.",
+          ExitCode.Network,
+          { cause: error }
+        );
+      }
+    }
+    if (attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
+    }
+  }
+  throw new CliError(
+    "CONNECTION_FAILED",
+    `DoneBond API rejected the evidence upload${lastStatus === undefined ? "" : ` (HTTP ${lastStatus})`}.`,
+    lastStatus === 409 ? ExitCode.Conflict : ExitCode.Network
+  );
+}

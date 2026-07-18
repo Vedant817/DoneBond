@@ -486,6 +486,7 @@ export const evidenceBundles = pgTable(
     publicId: varchar("public_id", { length: 26 }).notNull(),
     schemaVersion: integer("schema_version").notNull(),
     objectLocation: text("object_location").notNull(),
+    bundleJson: jsonb("bundle_json").$type<Record<string, unknown>>().notNull(),
     evidenceHash: varchar("evidence_hash", { length: 66 }).notNull(),
     commitHashDerived: varchar("commit_hash_derived", { length: 66 }).notNull(),
     gitObjectId: varchar("git_object_id", { length: 64 }).notNull(),

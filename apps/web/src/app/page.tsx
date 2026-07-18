@@ -14,10 +14,9 @@ import {
 // state, not a fabricated working page.
 const CREATE_PROJECT_PATH = "/projects/new";
 
-// Illustrative-only values for the "example receipt" below. These are not
-// derived from any real task, evidence bundle, or transaction -- the public
-// receipt API (milestone 4.7) does not exist yet, so this is a labeled mockup
-// rendered with the real design-system primitives rather than a screenshot.
+// Illustrative-only values for the example below. The real public receipt API
+// is available at /api/v1/receipt/[receiptId]; the authenticated product and
+// public proof screens replace this sample as their milestones land.
 const EXAMPLE_RECEIPT = {
   taskTitle: "Add cursor pagination to GET /tasks",
   taskHash: "0x14c05321a220bffaf8c927e5d17bd3530ae6c01c527a18929e7a9baf36ae6546",
@@ -130,8 +129,8 @@ export default function HomePage() {
           </Heading>
           <Text size="md" tone="muted">
             Illustrative only — this is a mockup built from the real design-system components, not a
-            live task. The public receipt page (task, policy, evidence, and transaction lookup by
-            hash) is a separate, not-yet-built milestone.
+            live task. Confirmed receipts are already available through the public API; the
+            shareable visual proof page is the remaining product milestone.
           </Text>
           <div className="landing-panel">
             <Stack gap={4}>

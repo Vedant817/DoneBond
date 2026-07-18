@@ -43,6 +43,13 @@
       "when": 1784375391871,
       "tag": "0005_purple_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784408091280,
+      "tag": "0006_busy_killmonger",
+      "breakpoints": true
     }
   ]
 }

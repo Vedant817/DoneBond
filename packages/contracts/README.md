@@ -45,14 +45,21 @@ to decide, the reward remains locked. A future dispute/review-deadline version m
 
 ## Deploy
 
-Never place the deployer key in a file. Export it only in the deployment shell, then run:
+Create an encrypted Foundry keystore for a dedicated, funded testnet deployer:
 
 ```bash
-read -s DEPLOYER_PRIVATE_KEY && export DEPLOYER_PRIVATE_KEY
+cast wallet new ~/.foundry/keystores donebond-deployer
+cast wallet address --account donebond-deployer
+```
+
+Fund the printed address with test MON, then deploy from this package directory. Foundry prompts for
+the keystore password without exposing the private key:
+
+```bash
 export VERIFIER_ADDRESS=0xYourPassingEvidenceVerifier
 forge script script/DeployDoneBondRegistry.s.sol:DeployDoneBondRegistry \
-  --rpc-url monad_testnet --broadcast
-unset DEPLOYER_PRIVATE_KEY VERIFIER_ADDRESS
+  --account donebond-deployer --rpc-url monad_testnet --broadcast
+unset VERIFIER_ADDRESS
 ```
 
 Add `--verify` only after setting the explorer variables documented in the repository environment

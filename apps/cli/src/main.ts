@@ -11,6 +11,8 @@ import { CliError, ExitCode, toCliError } from "./errors.js";
 import { initializeRepository } from "./init.js";
 import { CliOutput } from "./output.js";
 import { renderPolicySummary, validatePolicyCommand } from "./policy-command.js";
+import { verifyPublicReceipt } from "./receipt-command.js";
+import { submitEvidence } from "./submit-command.js";
 import { pullTask } from "./task-command.js";
 import { verifyTask, type VerifyTaskResult } from "./verify-command.js";
 import { readVersion } from "./version.js";
@@ -27,6 +29,8 @@ Commands:
   policy validate  Validate and explain the deterministic verification policy
   task pull        Fetch and validate a task into the local repository
   verify           Execute policy checks and write canonical evidence
+  submit           Validate and upload passing evidence to DoneBond
+  receipt verify   Independently verify a public receipt against Monad
 
 Global options:
   --json       Emit newline-delimited JSON results and errors
@@ -89,6 +93,30 @@ Options:
   -h, --help           Show this command help
 `;
 
+const SUBMIT_HELP = `Usage: donebond submit [options]
+
+Validates a canonical passing evidence bundle against the local policy, task,
+and exact Git commit, uploads it with retry-safe idempotency, then compares the
+server commitments with the local values. This command never requests a key.
+
+Options:
+  --repo <path>        Start repository discovery at path (default: current directory)
+  --bundle <filename>  Evidence file inside .donebond (default: <task-id>.evidence.json)
+  -h, --help           Show this command help
+`;
+
+const RECEIPT_VERIFY_HELP = `Usage: donebond receipt verify <receipt-id> [options]
+
+Downloads the public evidence bundle, recomputes its commitment, validates the
+verifier signature, and compares the task, transaction, and ReceiptSubmitted
+event with an independently selected Monad RPC endpoint.
+
+Options:
+  --api-url <url>  Public DoneBond application origin
+  --rpc-url <url>  Independent Monad JSON-RPC endpoint
+  -h, --help       Show this command help
+`;
+
 interface CliContext {
   stdin: Readable & { isTTY?: boolean; setRawMode?: (mode: boolean) => void };
   stdout: Writable;
@@ -134,6 +162,19 @@ interface VerifyArguments {
   repo: string;
   commit?: string;
   output?: string;
+}
+
+interface SubmitArguments {
+  help: boolean;
+  repo: string;
+  bundle?: string;
+}
+
+interface ReceiptVerifyArguments {
+  help: boolean;
+  receiptId?: string;
+  apiUrl?: string;
+  rpcUrl?: string;
 }
 
 function optionValue(arguments_: string[], index: number, option: string): string {
@@ -308,6 +349,84 @@ function parseVerifyArguments(arguments_: string[], defaultRepository: string): 
       default:
         throw new CliError("CLI_USAGE", "Unknown verify option.", ExitCode.Usage);
     }
+  }
+  return parsed;
+}
+
+function parseSubmitArguments(arguments_: string[], defaultRepository: string): SubmitArguments {
+  const parsed: SubmitArguments = { help: false, repo: defaultRepository };
+  const seen = new Set<string>();
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === undefined) continue;
+    const canonical = argument === "-h" ? "--help" : argument;
+    if (seen.has(canonical)) {
+      throw new CliError("CLI_USAGE", "A submit option was provided twice.", ExitCode.Usage);
+    }
+    seen.add(canonical);
+    switch (canonical) {
+      case "--help":
+        parsed.help = true;
+        break;
+      case "--repo":
+        parsed.repo = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      case "--bundle":
+        parsed.bundle = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      default:
+        throw new CliError("CLI_USAGE", "Unknown submit option.", ExitCode.Usage);
+    }
+  }
+  return parsed;
+}
+
+function parseReceiptVerifyArguments(arguments_: string[]): ReceiptVerifyArguments {
+  const parsed: ReceiptVerifyArguments = { help: false };
+  const seen = new Set<string>();
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === undefined) continue;
+    const canonical = argument === "-h" ? "--help" : argument;
+    if (!canonical.startsWith("-")) {
+      if (parsed.receiptId !== undefined) {
+        throw new CliError(
+          "CLI_USAGE",
+          "receipt verify accepts exactly one receipt ID.",
+          ExitCode.Usage
+        );
+      }
+      parsed.receiptId = canonical;
+      continue;
+    }
+    if (seen.has(canonical)) {
+      throw new CliError("CLI_USAGE", "A receipt option was provided twice.", ExitCode.Usage);
+    }
+    seen.add(canonical);
+    switch (canonical) {
+      case "--help":
+        parsed.help = true;
+        break;
+      case "--api-url":
+        parsed.apiUrl = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      case "--rpc-url":
+        parsed.rpcUrl = optionValue(arguments_, index, canonical);
+        index += 1;
+        break;
+      default:
+        throw new CliError("CLI_USAGE", "Unknown receipt verify option.", ExitCode.Usage);
+    }
+  }
+  if (!parsed.help && (!parsed.receiptId || !parsed.apiUrl || !parsed.rpcUrl)) {
+    throw new CliError(
+      "CLI_USAGE",
+      "receipt verify requires a receipt ID, --api-url, and --rpc-url.",
+      ExitCode.Usage
+    );
   }
   return parsed;
 }
@@ -558,6 +677,66 @@ async function execute(
       }))
     });
     return result.passing ? ExitCode.Success : ExitCode.Verification;
+  }
+  if (filtered[0] === "submit") {
+    const submitArguments = parseSubmitArguments(filtered.slice(1), context.cwd);
+    if (submitArguments.help) {
+      output.result(SUBMIT_HELP.trimEnd());
+      return ExitCode.Success;
+    }
+    const result = await submitEvidence({
+      startDirectory: submitArguments.repo,
+      ...(submitArguments.bundle === undefined ? {} : { bundlePath: submitArguments.bundle }),
+      environment: context.environment,
+      fetchImplementation: context.fetchImplementation
+    });
+    output.result(
+      `Evidence submitted.\nEvidence: ${result.evidenceHash}\nPublic bundle: ${result.publicEvidenceUrl}\nSubmit the receipt with your wallet: ${result.taskUrl}`,
+      {
+        evidencePublicId: result.evidencePublicId,
+        taskPublicId: result.taskPublicId,
+        evidenceHash: result.evidenceHash,
+        commitHash: result.commitHash,
+        publicEvidenceUrl: result.publicEvidenceUrl,
+        taskUrl: result.taskUrl
+      }
+    );
+    return ExitCode.Success;
+  }
+  if (filtered[0] === "receipt") {
+    if (filtered[1] !== "verify") {
+      throw new CliError(
+        "CLI_USAGE",
+        "Unknown receipt command. Run donebond receipt verify --help.",
+        ExitCode.Usage
+      );
+    }
+    const receiptArguments = parseReceiptVerifyArguments(filtered.slice(2));
+    if (receiptArguments.help) {
+      output.result(RECEIPT_VERIFY_HELP.trimEnd());
+      return ExitCode.Success;
+    }
+    const result = await verifyPublicReceipt({
+      receiptId: receiptArguments.receiptId as string,
+      apiUrl: receiptArguments.apiUrl as string,
+      rpcUrl: receiptArguments.rpcUrl as string,
+      fetchImplementation: context.fetchImplementation
+    });
+    output.result(
+      `Receipt independently verified.\nEvidence: ${result.evidenceHash}\nTransaction: ${result.transactionHash}\nVerifier: ${result.verifierAddress}`,
+      {
+        verified: true,
+        receiptId: result.receiptId,
+        evidencePublicId: result.evidencePublicId,
+        evidenceHash: result.evidenceHash,
+        commitHash: result.commitHash,
+        transactionHash: result.transactionHash,
+        chainId: result.chainId,
+        contractAddress: result.contractAddress,
+        verifierAddress: result.verifierAddress
+      }
+    );
+    return ExitCode.Success;
   }
   if (filtered[0] !== "init") {
     throw new CliError(

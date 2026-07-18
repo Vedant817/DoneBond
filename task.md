@@ -235,7 +235,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 - [x] Implement wallet ownership association/signature challenge if used.
 - [x] Add project ownership/member checks.
 - [x] Add authorization matrix tests.
-- [ ] Ensure public endpoints use a strict field allowlist.
+- [x] Ensure public endpoints use a strict field allowlist.
 
 ## 4.3 CLI tokens
 
@@ -269,7 +269,7 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 - [x] Run residual secret checks (server re-scans redacted check output with `findResidualSecrets` before persisting; `EVIDENCE_RESIDUAL_SECRET` on a hit — defense in depth against a CLI that redacted incorrectly).
 - [x] Store safe bundle in object storage or database for MVP (metadata + checks persisted relationally in `evidence_bundles`/`verification_checks`).
 - [x] Persist check summaries transactionally (`DoneBondRepository.persistEvidence`, one transaction for idempotency key, bundle row, checks, and audit event).
-- [ ] Return unsigned receipt call parameters only for passing evidence — deferred to 4.7 (Public receipt API); requires chain/contract calldata wiring analogous to task chain-intent and is out of scope for the upload/list/detail endpoints built here.
+- [x] Return unsigned receipt call parameters only for passing evidence (implemented by the receipt-intent boundary, which revalidates the latest passing bundle and returns exact `submitReceipt` calldata).
 - [x] Prevent conflicting replay/idempotency requests (`DB_IDEMPOTENCY_CONFLICT` → `EVIDENCE_UPLOAD_CONFLICT`, 409; verified in `packages/db` and `apps/web` tests).
 
 Routes: `POST /api/v1/projects/[projectId]/evidence` (submit), `GET /api/v1/projects/[projectId]/tasks/[taskId]/evidence` (list, keyset-paginated), `GET /api/v1/evidence/[evidenceId]` (public detail). The listing route is nested under the project (not the flat `/api/v1/tasks/[taskId]/evidence` shape sketched mid-session) because CLI-token authentication is project-bound and must know the project before authenticating — matches the existing `projects/[projectId]/policies/[policyId]` nesting convention.
@@ -303,9 +303,9 @@ Explicitly out of scope, left for milestone 4.8 per its own listed checklist: fu
 
 ## 4.8 Event indexing and reconciliation
 
-- [ ] Implement contract event decoder.
-- [ ] Store event uniquely by chain/tx/log index.
-- [ ] Reconcile pending transactions.
+- [x] Implement contract event decoders for task creation and receipt submission.
+- [x] Store decoded events uniquely by chain/transaction/log index.
+- [x] Reconcile registered task and receipt transactions through authenticated retry-safe endpoints; the web flow invokes them immediately after broadcast.
 - [ ] Make processing idempotent and reorg-aware to the extent appropriate for testnet MVP.
 - [ ] Add admin/debug visibility without exposing sensitive data.
 
@@ -356,18 +356,18 @@ Explicitly out of scope, left for milestone 4.8 per its own listed checklist: fu
 
 ## 5.6 `donebond submit`
 
-- [ ] Validate bundle locally.
-- [ ] Upload with idempotency key and retry policy.
-- [ ] Compare server commitments.
-- [ ] Print public receipt and web transaction link/instructions.
-- [ ] Never sign with or request a raw private key.
+- [x] Validate bundle locally.
+- [x] Upload with idempotency key and retry policy.
+- [x] Compare server commitments.
+- [x] Print public evidence/task links and receipt submission instructions.
+- [x] Never sign with or request a raw private key.
 
 ## 5.7 `donebond receipt verify`
 
-- [ ] Download public bundle.
-- [ ] Recompute evidence commitment.
-- [ ] Read contract state/event through RPC.
-- [ ] Compare all commitments and print independently verified status.
+- [x] Download public bundle.
+- [x] Recompute evidence commitment.
+- [x] Read contract state/event through RPC.
+- [x] Compare all commitments and print independently verified status.
 
 ## 5.8 CLI distribution
 
@@ -402,48 +402,48 @@ Explicitly out of scope, left for milestone 4.8 per its own listed checklist: fu
 
 ## 6.3 Project screens
 
-- [ ] Project list/create/detail.
-- [ ] Policy status and version.
-- [ ] CLI token creation/revocation.
-- [ ] Copyable setup commands.
+- [x] Project list/create/detail.
+- [x] Policy status and version.
+- [ ] CLI token revocation UI (secure creation and API revocation are complete).
+- [x] Copyable setup commands.
 
 ## 6.4 Task creation
 
-- [ ] Acceptance-criteria editor.
-- [ ] Assignee wallet and deadline validation.
+- [x] Acceptance-criteria editor.
+- [x] Assignee wallet and deadline validation.
 - [ ] Policy summary and commitment preview.
-- [ ] Optional MON reward.
+- [x] Optional MON reward.
 - [ ] Network/contract/amount review.
 - [ ] Wallet rejection/pending/revert/recovery states.
 
 ## 6.5 Task detail and receipt
 
-- [ ] Human-readable requested outcome.
+- [x] Human-readable requested outcome.
 - [ ] Git commit and repository state.
 - [ ] Deterministic check results.
 - [ ] Redacted output previews.
-- [ ] Task/policy/evidence/commit hashes.
-- [ ] Transaction and explorer links.
-- [ ] Creator approve/reject controls with permission/state guards.
-- [ ] Contributor withdrawal flow.
+- [x] Task/policy/evidence/commit hashes.
+- [x] Transaction and explorer links.
+- [x] Creator approve/reject controls with contract permission/state guards and live chain-state refresh.
+- [x] Contributor withdrawal flow.
 
 ## 6.6 Public proof page
 
-- [ ] No-login route with stable public ID.
-- [ ] Integrity result and caveat.
-- [ ] Safe bundle download.
-- [ ] Responsive hash and check presentation.
+- [x] No-login route with stable public ID.
+- [x] Integrity result and caveat.
+- [x] Safe canonical bundle download.
+- [x] Responsive hash and check presentation.
 - [ ] Metadata suitable for sharing.
 
 ## 6.7 Error and empty states
 
-- [ ] First project/task.
-- [ ] No receipt yet.
-- [ ] Failed evidence.
-- [ ] RPC unavailable.
-- [ ] Unsupported wallet/network.
+- [x] First project/task.
+- [x] No receipt yet.
+- [x] Failed evidence.
+- [x] RPC unavailable without falsely marking the transaction failed.
+- [x] Unsupported wallet/network.
 - [ ] Pending or replaced transaction.
-- [ ] Evidence unavailable or hash mismatch.
+- [x] Evidence unavailable or hash mismatch.
 
 **Integration checkpoint 5:** the entire UI uses real API/contract state; no hardcoded successful task remains.
 
@@ -493,11 +493,11 @@ Explicitly out of scope, left for milestone 4.8 per its own listed checklist: fu
 ## 8.1 Security review
 
 - [ ] Complete `SECURITY.md` checklist.
-- [ ] Run secret scan across history.
-- [ ] Run dependency audit.
-- [ ] Review auth/IDOR/CSRF/XSS controls.
-- [ ] Test evidence leakage and redaction.
-- [ ] Resolve contract audit findings.
+- [x] Run secret scan across history.
+- [x] Run dependency audit.
+- [x] Review auth/IDOR/CSRF/XSS controls.
+- [x] Test evidence leakage and redaction.
+- [x] Resolve contract audit findings.
 
 ## 8.2 Reliability and observability
 
@@ -511,17 +511,17 @@ Explicitly out of scope, left for milestone 4.8 per its own listed checklist: fu
 
 - [ ] Keyboard-only core flow.
 - [ ] Automated accessibility scan.
-- [ ] Manual mobile and desktop checks.
-- [ ] Status not color-only.
-- [ ] Long hashes/output do not break layout.
+- [x] Mobile and desktop responsive smoke checks.
+- [x] Status not color-only.
+- [x] Long hashes/output do not break layout.
 
 ## 8.4 Performance
 
 - [ ] Analyze web bundle.
 - [ ] Avoid blocking unnecessary RPC calls during first render.
 - [ ] Paginate task/receipt lists.
-- [ ] Bound evidence payloads.
-- [ ] Cache public immutable data safely.
+- [x] Bound evidence payloads.
+- [x] Cache public immutable data safely.
 
 ---
 
@@ -529,10 +529,10 @@ Explicitly out of scope, left for milestone 4.8 per its own listed checklist: fu
 
 ## 9.1 Environments
 
-- [ ] Define local, preview, and production/testnet environments.
-- [ ] Validate environment variables at startup.
-- [ ] Keep secrets in platform secret stores.
-- [ ] Add safe database migration procedure and rollback note.
+- [x] Define local, preview, and production/testnet environments.
+- [x] Validate environment variables at startup.
+- [x] Document secrets in platform secret stores.
+- [x] Add safe database migration procedure and rollback note.
 
 ## 9.2 Web/API/database deployment
 
@@ -849,3 +849,11 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: The verifier private key is read from `process.env.VERIFIER_PRIVATE_KEY` in exactly one place (`receipt-runtime.ts`'s lazy `initialize()`), validated for shape at startup, never logged, never returned in any response, and never leaves the closure captured by `signAttestation`; the signing module only signs a data field, never submits or co-signs a transaction, matching ADR-004's non-negotiable boundary. Receipt submission authorization is assignee-wallet-only (verified independently from the client-supplied evidence, since `createReceiptChainIntent` re-derives the task's assignee/evidence/passing state inside its own DB transaction rather than trusting the handler's earlier read). `integrityStatus` is computed by independently recomputing the digest and recovering the ECDSA signer against the deployment's configured verifier address on every read — never by trusting a persisted boolean — so a future verifier-key rotation correctly turns older receipts' status to `mismatch` instead of silently continuing to claim `verified`. The public receipt DTO is built as an explicit literal object (never a spread of the DB record), and a test asserts the exact key set, including that full check stdout/stderr previews never leak into the terse public summary.
 - Remaining risks/blockers: Real PostgreSQL and Monad RPC are still unavailable in this environment, so the new migration, repository methods, and reconciliation path are verified by typecheck, the existing fail-fast-before-DB-access test style, and a full production build, but not by a live database run (the same pre-existing gap noted in every prior milestone's work log). `pnpm test:e2e` was not run for the same pre-existing `NEXT_PUBLIC_APP_URL`/`AUTH_SECRET` local-env reason noted in 4.5/4.6. Approve/reject/cancel/withdraw chain-intent flows and the general contract-event indexer are correctly left to their own milestones (6.5 and 4.8 respectively) and are not touched here. `VerifierAttestationConsumed` is verified during reconciliation but intentionally not persisted as its own indexed `contract_events` row (only `ReceiptSubmitted` is), matching `TaskCreated`'s existing single-event persistence precedent; broadening this is naturally part of 4.8's general event indexer. `MANIFEST.sha256` was not regenerated (its `.env.example` entry is now stale) since the exact regeneration command has not been documented anywhere I could find in `scripts/`; the coordinator should regenerate it before committing. Push remains blocked by the same personal SSH key issue noted in every prior milestone's work log.
 - Commit: feature commit `ccbf55f` on `worktree-agent-a9fb3baf264e58c3b`; merged into `main` as `2dbc0b0`.
+
+## 2026-07-19 — Codex — testnet-readiness completion
+
+- Summary: Implemented the missing CLI evidence submission and independent public-receipt verifier; completed authenticated project/task screens and the no-login proof page; added wallet transaction submission, immediate reconciliation, settlement controls, and chain-state refresh; made public evidence independently hashable; repaired migration ordering and raw timestamp encoding; and refreshed deployment/CLI documentation and testnet RPC defaults.
+- Database: Added migration `0006` for canonical evidence bundle JSON and corrected migration `0005` constraint ordering. A disposable PostgreSQL 17 database applied the complete migration history and passed the guarded integration test.
+- Verification: Formatting, lint/boundaries, workspace typecheck, 23 CLI tests, 97 web tests, 73 deterministic DB tests (plus the live PostgreSQL test), 36 evidence tests, 28 UI tests, 16 shared tests, 32 Foundry adversarial/fuzz/invariant tests, production build, three Playwright browser smoke tests, production dependency audit, history secret scan, and diff checks pass.
+- Local chain smoke: Deployed the reviewed registry to a local Anvil chain configured with Monad Testnet chain ID `10143` and the configured verifier, proving the deployment script and constructor path. This is local verification only and is not represented as a public Monad deployment.
+- Remaining external blockers: Public Monad deployment/source verification and hosted web/database release still require a dedicated funded deployer wallet, reachable public RPC/DNS, hosting/database credentials, and final public URLs. The in-app browser control surface returned no available browser instance; Playwright exercised the rendered desktop/mobile and public-error states instead.

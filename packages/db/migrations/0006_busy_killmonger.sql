@@ -1,0 +1,1 @@
+ALTER TABLE "evidence_bundles" ADD COLUMN "bundle_json" jsonb NOT NULL;

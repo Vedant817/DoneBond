@@ -16,6 +16,7 @@ const PLACEHOLDER_PARTS = [
   "dummy",
   "test-only"
 ];
+const KNOWN_SAFE_FIXTURES = new Set([["AKIA", "ABCDEFGHIJKLMNOP"].join("")]);
 
 const rules = [
   { name: "private key", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g },
@@ -36,6 +37,7 @@ const rules = [
 function isPlaceholder(value) {
   const normalized = value.trim().toLowerCase();
   return (
+    KNOWN_SAFE_FIXTURES.has(value.trim()) ||
     normalized.startsWith("${") ||
     normalized.startsWith("process.env.") ||
     normalized.startsWith("env.") ||

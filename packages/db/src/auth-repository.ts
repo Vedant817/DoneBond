@@ -267,6 +267,8 @@ export class DrizzleBrowserSessionStore {
   ): Promise<StoredBrowserSessionRecord | null> {
     assertDigest(tokenDigest, "Session token digest");
     const requestedIdleExpiry = new Date(accessedAt.getTime() + this.idleTtlMs);
+    const accessedAtSql = sql`${accessedAt.toISOString()}::timestamptz`;
+    const requestedIdleExpirySql = sql`${requestedIdleExpiry.toISOString()}::timestamptz`;
     const activeSessionPredicates = [
       eq(browserSessions.tokenDigest, tokenDigest),
       isNull(browserSessions.revokedAt),
@@ -281,8 +283,8 @@ export class DrizzleBrowserSessionStore {
         const [session] = await transaction
           .update(browserSessions)
           .set({
-            lastSeenAt: sql`greatest(${browserSessions.lastSeenAt}, ${accessedAt})`,
-            idleExpiresAt: sql`least(${browserSessions.absoluteExpiresAt}, greatest(${browserSessions.idleExpiresAt}, ${requestedIdleExpiry}))`
+            lastSeenAt: sql`greatest(${browserSessions.lastSeenAt}, ${accessedAtSql})`,
+            idleExpiresAt: sql`least(${browserSessions.absoluteExpiresAt}, greatest(${browserSessions.idleExpiresAt}, ${requestedIdleExpirySql}))`
           })
           .where(and(...activeSessionPredicates))
           .returning();

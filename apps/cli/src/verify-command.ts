@@ -46,7 +46,7 @@ export interface VerifyTaskResult {
   readonly failureCodes: readonly string[];
 }
 
-async function readTaskManifest(path: string): Promise<Task> {
+export async function readTaskManifest(path: string): Promise<Task> {
   const stats = await lstat(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") {
       throw new CliError(

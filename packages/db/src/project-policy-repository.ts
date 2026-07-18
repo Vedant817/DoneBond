@@ -672,7 +672,7 @@ export class DrizzleProjectPolicyRepository {
           input.projectPublicId,
           input.actorUserId,
           "owner",
-          input.activate === true ? "update" : "share"
+          "update"
         );
         const reservationId = await this.reserve(transaction, idempotency, input.policyPublicId);
         if (!reservationId) {

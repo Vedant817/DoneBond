@@ -124,6 +124,7 @@ function initialize(): ReturnType<typeof createEvidenceHandlers> {
             publicId: input.publicId,
             schemaVersion: input.bundle.schemaVersion,
             objectLocation: "database:evidence_bundles",
+            bundleJson: input.bundle,
             evidenceHash: input.evidenceHash,
             commitHashDerived: input.commitHashDerived,
             gitObjectId: input.gitObjectId,

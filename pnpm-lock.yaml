@@ -51,6 +51,9 @@ importers:
       "@donebond/shared":
         specifier: workspace:*
         version: link:../../packages/shared
+      viem:
+        specifier: 2.55.2
+        version: 2.55.2(typescript@5.9.3)(zod@4.4.3)
     devDependencies:
       "@types/node":
         specifier: "catalog:"

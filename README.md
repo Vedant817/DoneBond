@@ -23,15 +23,68 @@ A developer creates a task with explicit acceptance criteria and deterministic c
 7. Approve the verified result and withdraw the bounty.
 8. Share a public proof page.
 
-## Recommended implementation stack
+## What is implemented
+
+- Wallet challenge authentication, project/policy/task management, copy-once CLI tokens, and a responsive project UI.
+- A strict CLI workflow: `init`, `policy validate`, `task pull`, `verify`, `submit`, and independent `receipt verify`.
+- Canonical evidence generation with exact Git-state binding, bounded deterministic checks, secret redaction, and server-side commitment revalidation.
+- Monad task escrow, passing-evidence attestations, receipt anchoring, approve/reject/cancel, and pull-payment withdrawal.
+- Public proof pages and APIs that expose the canonical safe bundle needed for independent hash verification.
+- PostgreSQL migrations, idempotent wallet-transaction registration, confirmation reconciliation, security headers, CI, Foundry tests, and Playwright smoke tests.
+
+## Local development
+
+Prerequisites are Node.js 24.14, pnpm 11.6, PostgreSQL 17, and Foundry 1.7.1. Copy `.env.example` to `.env`, generate the three application secrets as documented there, and configure a local or Monad Testnet registry.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm db:migrate
+pnpm dev
+```
+
+Open `http://localhost:3100`. The web process validates its auth and verifier configuration before production startup. Use a separate database for integration tests; the guarded database test refuses remote or unconfirmed destructive resets.
+
+## CLI workflow
+
+The workspace build is directly runnable before publication:
+
+```bash
+pnpm --filter @donebond/cli build
+pnpm donebond --help
+
+# after creating a project and copy-once token in the web app
+printf '%s' "$DONEBOND_CLI_TOKEN" | pnpm donebond init \
+  --api-url https://your-app.example --project-id <project-id> --token-stdin
+pnpm donebond task pull <task-id>
+pnpm donebond verify
+pnpm donebond submit
+pnpm donebond receipt verify <receipt-id> \
+  --api-url https://your-app.example --rpc-url https://rpc.testnet.monad.xyz
+```
+
+`receipt verify` downloads the public canonical bundle, recomputes the evidence hash, recovers the immutable verifier signature, reads the registry state, and validates the exact `ReceiptSubmitted` event through the independently selected RPC.
+
+## Testnet release
+
+Follow [DEPLOYMENT.md](./DEPLOYMENT.md). A public release requires a dedicated funded deployer, a verifier EOA, a managed PostgreSQL database, the applied migrations, and the deployed registry address/block in the hosting platform's secret store. Never reuse the verifier key as a deployer key.
+
+Run the complete release gate before deployment:
+
+```bash
+pnpm verify
+TEST_DATABASE_URL=postgresql://... DONEBOND_ALLOW_DATABASE_RESET=test-only-confirmed \
+  node --test packages/db/test/postgres.integration.test.mjs
+```
+
+## Implementation stack
 
 - Monorepo: pnpm + Turborepo
-- Web: Next.js, TypeScript, Tailwind, accessible component primitives
+- Web: Next.js App Router, React, TypeScript, and accessible component primitives
 - API: Next.js route handlers or a small Node service
 - Database: PostgreSQL (Supabase) + Drizzle ORM
 - Contracts: Solidity + Foundry + OpenZeppelin
-- Web3: viem + wagmi; Reown AppKit or another compatible wallet connector
-- CLI: TypeScript, Commander, execa, Zod
+- Web3: viem with EIP-1193 injected-wallet requests
+- CLI: TypeScript with strict local parsing and shell-free process execution
 - Tests: Node.js built-in test runner, Foundry, Playwright
 - Deployment: Vercel for web/API, Supabase Postgres, Monad Testnet first
 

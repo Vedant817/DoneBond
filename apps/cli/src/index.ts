@@ -9,7 +9,9 @@ export { ExitCode } from "./errors.js";
 export { initializeRepository } from "./init.js";
 export { runCli } from "./main.js";
 export { validatePolicyCommand } from "./policy-command.js";
+export { verifyPublicReceipt } from "./receipt-command.js";
 export { pullTask } from "./task-command.js";
+export { submitEvidence } from "./submit-command.js";
 export { verifyTask } from "./verify-command.js";
 
 const entrypoint = process.argv[1];

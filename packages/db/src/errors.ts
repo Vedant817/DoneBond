@@ -21,11 +21,26 @@ export class DatabaseServiceError extends Error {
 
 type PostgreSqlError = Error & { code?: string; constraint?: string; constraint_name?: string };
 
+function postgresError(error: unknown): PostgreSqlError | null {
+  let current = error;
+  const seen = new Set<unknown>();
+  let firstCoded: PostgreSqlError | null = null;
+  for (let depth = 0; depth < 12; depth += 1) {
+    if (!(current instanceof Error) || seen.has(current)) return firstCoded;
+    seen.add(current);
+    const candidate = current as PostgreSqlError;
+    if (candidate.code === "23505") return candidate;
+    if (candidate.code !== undefined && firstCoded === null) firstCoded = candidate;
+    current = current.cause;
+  }
+  return firstCoded;
+}
+
 export function translateDatabaseError(error: unknown): DatabaseServiceError {
   if (error instanceof DatabaseServiceError) return error;
-  if (error instanceof Error && (error as PostgreSqlError).code === "23505") {
-    const constraint =
-      (error as PostgreSqlError).constraint_name ?? (error as PostgreSqlError).constraint;
+  const postgres = postgresError(error);
+  if (postgres?.code === "23505") {
+    const constraint = postgres.constraint_name ?? postgres.constraint;
     if (constraint === "projects_owner_slug_unique") {
       return new DatabaseServiceError(
         "DB_PROJECT_SLUG_CONFLICT",

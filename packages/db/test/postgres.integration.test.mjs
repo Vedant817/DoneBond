@@ -45,7 +45,9 @@ test(
     });
     const client = postgres(testDatabaseUrl, buildPostgresOptions(environment));
     try {
-      await client.unsafe("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public");
+      await client.unsafe(
+        "DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public"
+      );
       const database = drizzle(client, { schema: databaseSchema });
       await migrate(database, {
         migrationsFolder: fileURLToPath(new URL("../migrations", import.meta.url))
@@ -56,7 +58,7 @@ test(
         FROM information_schema.tables
         WHERE table_schema = 'public'
       `;
-      assert.equal(tableCount, 16);
+      assert.equal(tableCount, 17);
 
       const requiredConstraints = [
         "tasks_policy_same_project_hash_fk",
@@ -68,7 +70,11 @@ test(
         "auth_rate_limits_scope_key_pk",
         "api_idempotency_response_complete",
         "projects_default_branch_not_option",
-        "policies_source_relative"
+        "policies_source_relative",
+        "receipt_attestations_chain_transaction_task_fk",
+        "receipt_attestations_evidence_bundle_task_fk",
+        "chain_transactions_id_task_unique",
+        "evidence_id_task_unique"
       ];
       const constraintRows = await client`
         SELECT conname
@@ -159,7 +165,7 @@ test(
         publicId: managedProjectPublicId,
         slug: "repository-integration",
         name: "Repository integration",
-        repositoryUrl: "https://example.test/owner/repository-integration.git",
+        repositoryUrl: "https://github.com/Vedant817/repository-integration.git",
         defaultBranch: "main",
         visibility: "private"
       };
@@ -391,7 +397,7 @@ test(
         projectPolicyRepository.createPolicyVersion(
           {
             ...managedPolicyInput,
-            policyPublicId: "01arz3ndektsv4rrffq69g5fau",
+            policyPublicId: "01arz3ndektsv4rrffq69g5fax",
             policyHash: concurrentPolicyHash,
             activate: false
           },
@@ -400,7 +406,7 @@ test(
         projectPolicyRepository.createPolicyVersion(
           {
             ...managedPolicyInput,
-            policyPublicId: "01arz3ndektsv4rrffq69g5fav",
+            policyPublicId: "01arz3ndektsv4rrffq69g5fay",
             policyHash: concurrentPolicyHash,
             activate: false
           },
@@ -431,8 +437,8 @@ test(
         ) VALUES (
           ${managedIds.project_id}, '01arz3ndektsv4rrffq69g5fat', ${managedIds.policy_id}, 10143,
           ${`0x${"1".repeat(40)}`}, 'Immutable repository task', 'Integration task',
-          ${client.json({ kind: "donebond.task", schemaVersion: 1 })}, 'main', NULL,
-          ${client.json([{ text: "Tests pass" }])}, ${`0x${"c".repeat(64)}`},
+          ${JSON.stringify({ kind: "donebond.task", schemaVersion: 1 })}::jsonb, 'main', NULL,
+          ${JSON.stringify([{ text: "Tests pass" }])}::jsonb, ${`0x${"c".repeat(64)}`},
           ${managedPolicyHash}, ${`0x${"2".repeat(40)}`}, ${`0x${"3".repeat(40)}`}
         )
       `;
@@ -442,7 +448,7 @@ test(
             actorUserId: userId,
             projectPublicId: managedProjectPublicId,
             changedAt: new Date("2026-07-17T09:01:00.000Z"),
-            repositoryUrl: "https://example.test/owner/changed.git"
+            repositoryUrl: "https://github.com/Vedant817/changed.git"
           },
           idempotency(
             "project_update",
@@ -619,7 +625,7 @@ test(
       const [afterRevokedAuthentication] = await client`
         SELECT last_used_at FROM cli_tokens WHERE public_id = ${cliTokenPublicId}
       `;
-      assert.equal(afterRevokedAuthentication.last_used_at.getTime(), usedAt.getTime());
+      assert.equal(new Date(afterRevokedAuthentication.last_used_at).getTime(), usedAt.getTime());
       const [{ revokeAuditCount }] = await client`
         SELECT count(*)::int AS "revokeAuditCount"
         FROM audit_events

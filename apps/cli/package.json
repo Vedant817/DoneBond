@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@donebond/evidence": "workspace:*",
-    "@donebond/shared": "workspace:*"
+    "@donebond/shared": "workspace:*",
+    "viem": "2.55.2"
   },
   "devDependencies": {
     "@types/node": "catalog:",

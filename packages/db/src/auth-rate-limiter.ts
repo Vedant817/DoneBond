@@ -67,6 +67,8 @@ export class DrizzleAuthRateLimiter {
     if (!Number.isSafeInteger(expiresAtMs)) throw invalid("Rate-limit window is out of range");
     const newWindowExpiresAt = new Date(expiresAtMs);
     assertDate(newWindowExpiresAt, "Rate-limit window expiry");
+    const atSql = sql`${at.toISOString()}::timestamptz`;
+    const newWindowExpiresAtSql = sql`${newWindowExpiresAt.toISOString()}::timestamptz`;
 
     try {
       const consumed = await this.database
@@ -81,11 +83,11 @@ export class DrizzleAuthRateLimiter {
         .onConflictDoUpdate({
           target: [authRateLimits.scope, authRateLimits.keyDigest],
           set: {
-            windowStartedAt: sql`case when ${authRateLimits.windowExpiresAt} <= ${at} then ${at} else ${authRateLimits.windowStartedAt} end`,
-            windowExpiresAt: sql`case when ${authRateLimits.windowExpiresAt} <= ${at} then ${newWindowExpiresAt} else ${authRateLimits.windowExpiresAt} end`,
-            requestCount: sql`case when ${authRateLimits.windowExpiresAt} <= ${at} then 1 else ${authRateLimits.requestCount} + 1 end`
+            windowStartedAt: sql`case when ${authRateLimits.windowExpiresAt} <= ${atSql} then ${atSql} else ${authRateLimits.windowStartedAt} end`,
+            windowExpiresAt: sql`case when ${authRateLimits.windowExpiresAt} <= ${atSql} then ${newWindowExpiresAtSql} else ${authRateLimits.windowExpiresAt} end`,
+            requestCount: sql`case when ${authRateLimits.windowExpiresAt} <= ${atSql} then 1 else ${authRateLimits.requestCount} + 1 end`
           },
-          setWhere: sql`${authRateLimits.windowExpiresAt} <= ${at} or ${authRateLimits.requestCount} < ${this.#maxAttempts}`
+          setWhere: sql`${authRateLimits.windowExpiresAt} <= ${atSql} or ${authRateLimits.requestCount} < ${this.#maxAttempts}`
         })
         .returning({ requestCount: authRateLimits.requestCount });
       return consumed.length === 1;
@@ -100,12 +102,13 @@ export class DrizzleAuthRateLimiter {
     if (!Number.isSafeInteger(limit) || limit <= 0 || limit > 1_000) {
       throw invalid("Rate-limit cleanup limit must be between 1 and 1000");
     }
+    const beforeSql = sql`${before.toISOString()}::timestamptz`;
     try {
       const deleted = await this.database.execute(sql`
         with expired as (
           select ${authRateLimits.scope}, ${authRateLimits.keyDigest}
           from ${authRateLimits}
-          where ${authRateLimits.windowExpiresAt} <= ${before}
+          where ${authRateLimits.windowExpiresAt} <= ${beforeSql}
           order by ${authRateLimits.windowExpiresAt}
           limit ${limit}
           for update skip locked

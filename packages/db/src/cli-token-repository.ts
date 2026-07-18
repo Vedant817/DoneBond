@@ -165,11 +165,12 @@ export class DrizzleCliTokenRepository {
       throw invalid("CLI token digest must be 64 lowercase hex characters");
     }
     assertDate(usedAt, "CLI token use time");
+    const usedAtSql = sql`${usedAt.toISOString()}::timestamptz`;
     try {
       const [authenticated] = await this.database
         .update(cliTokens)
         .set({
-          lastUsedAt: sql`greatest(coalesce(${cliTokens.lastUsedAt}, ${usedAt}), ${usedAt})`
+          lastUsedAt: sql`greatest(coalesce(${cliTokens.lastUsedAt}, ${usedAtSql}), ${usedAtSql})`
         })
         .from(projects)
         .where(

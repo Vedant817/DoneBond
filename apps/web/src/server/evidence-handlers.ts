@@ -34,6 +34,7 @@ export interface EvidenceRecord {
 }
 
 export interface EvidenceDetailRecord extends EvidenceRecord {
+  readonly bundleJson: unknown;
   readonly checks: readonly CheckRecord[];
 }
 
@@ -204,6 +205,7 @@ function evidenceDto(record: EvidenceRecord) {
 function evidenceDetailDto(record: EvidenceDetailRecord) {
   return {
     ...evidenceDto(record),
+    bundle: EvidenceBundleSchema.parse(record.bundleJson),
     checks: record.checks.map((check) => ({
       checkKey: check.checkKey,
       label: check.label,
