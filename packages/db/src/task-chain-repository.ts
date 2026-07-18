@@ -4,7 +4,7 @@ import {
   TaskSchema,
   type CanonicalTaskV1
 } from "@donebond/shared";
-import { and, desc, eq, lt, or } from "drizzle-orm";
+import { and, desc, eq, lt, ne, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { DatabaseServiceError, translateDatabaseError } from "./errors.js";
@@ -15,9 +15,11 @@ import {
   chainTransactions,
   contractEvents,
   databaseSchema,
+  evidenceBundles,
   policies,
   projectMembers,
   projects,
+  receiptAttestations,
   tasks,
   wallets
 } from "./schema.js";
@@ -25,6 +27,7 @@ import {
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type ChainStatus = typeof chainTransactions.$inferSelect.status;
+type IntentType = typeof chainTransactions.$inferSelect.intentType;
 
 export interface TaskCursor {
   readonly createdAt: Date;
@@ -95,7 +98,7 @@ export interface ChainTransactionView {
   readonly schemaVersion: 1;
   readonly publicId: string;
   readonly taskPublicId: string;
-  readonly intentType: "create_task";
+  readonly intentType: IntentType;
   readonly idempotencyKey: string;
   readonly chainId: 143 | 10_143;
   readonly fromAddress: string;
@@ -168,6 +171,55 @@ export interface TaskChainReconciliationContext {
   readonly assigneeWallet: string;
   readonly rewardWei: string;
   readonly deadlineUnixSeconds: string;
+}
+
+export interface EligiblePassingEvidence {
+  readonly publicId: string;
+  readonly evidenceHash: string;
+  readonly commitHashDerived: string;
+  readonly gitObjectId: string;
+}
+
+export interface CreateReceiptChainIntentInput {
+  readonly actorUserId: string;
+  readonly taskPublicId: string;
+  readonly publicId: string;
+  readonly assigneeWallet: string;
+  readonly evidenceBundlePublicId: string;
+  readonly evidenceHash: string;
+  readonly commitHash: string;
+  readonly attestationExpiryUnixSeconds: string;
+  readonly verifierAddress: string;
+  readonly signature: string;
+  readonly typedDataDigest: string;
+  readonly idempotencyKey: string;
+  readonly requestHash: string;
+  readonly requestedAt: Date;
+}
+
+export interface ReceiptChainReconciliationContext {
+  readonly transactionPublicId: string;
+  readonly transactionHash: `0x${string}`;
+  readonly status: "submitted" | "unknown_reconcile";
+  readonly chainId: 143 | 10_143;
+  readonly contractAddress: string;
+  readonly taskPublicId: string;
+  readonly chainTaskId: string;
+  readonly assigneeWallet: string;
+  readonly evidenceHash: string;
+  readonly commitHash: string;
+  readonly attestationExpiryUnixSeconds: string;
+  readonly verifierAddress: string;
+  readonly typedDataDigest: string;
+}
+
+export interface ConfirmReceiptSubmittedInput {
+  readonly transactionPublicId: string;
+  readonly expectedStatus: "submitted" | "unknown_reconcile";
+  readonly blockHash: string;
+  readonly blockNumber: bigint;
+  readonly logIndex: number;
+  readonly reconciledAt: Date;
 }
 
 export interface WalletOutcomeInput {
@@ -249,6 +301,23 @@ interface ChainIntentSnapshot {
   readonly kind: "chain_intent";
   readonly task: TaskSnapshot;
   readonly transaction: ChainSnapshot;
+}
+
+interface ReceiptAttestationSnapshot {
+  readonly evidenceBundlePublicId: string;
+  readonly evidenceHash: string;
+  readonly commitHash: string;
+  readonly attestationExpiryUnixSeconds: string;
+  readonly verifierAddress: string;
+  readonly signature: string;
+  readonly typedDataDigest: string;
+}
+
+interface ReceiptIntentSnapshot {
+  readonly kind: "receipt_chain_intent";
+  readonly task: TaskSnapshot;
+  readonly transaction: ChainSnapshot;
+  readonly attestation: ReceiptAttestationSnapshot;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -608,7 +677,7 @@ function parseChainSnapshot(value: unknown): ChainTransactionView {
     taskPublicId: parsed.data.taskPublicId,
     nonce: snapshot.nonce as string | null,
     chainId: parsed.data.chainId as 143 | 10_143,
-    intentType: "create_task",
+    intentType: parsed.data.intentType,
     createdAt,
     updatedAt
   };
@@ -631,6 +700,88 @@ function parseChainIntentSnapshot(value: unknown): {
   return {
     task: parseTaskSnapshot(snapshot.task),
     transaction: parseChainSnapshot(snapshot.transaction)
+  };
+}
+
+const SIGNATURE_65_BYTE = /^0x[0-9a-f]{130}$/u;
+
+function parseReceiptAttestationSnapshot(value: unknown): ReceiptAttestationSnapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw conflict("Stored receipt attestation snapshot is invalid");
+  }
+  const snapshot = value as Record<string, unknown>;
+  const expectedKeys = [
+    "evidenceBundlePublicId",
+    "evidenceHash",
+    "commitHash",
+    "attestationExpiryUnixSeconds",
+    "verifierAddress",
+    "signature",
+    "typedDataDigest"
+  ].sort();
+  if (Object.keys(snapshot).sort().join("\0") !== expectedKeys.join("\0")) {
+    throw conflict("Stored receipt attestation snapshot is invalid");
+  }
+  const {
+    evidenceBundlePublicId,
+    evidenceHash,
+    commitHash,
+    attestationExpiryUnixSeconds,
+    verifierAddress,
+    signature,
+    typedDataDigest
+  } = snapshot;
+  if (
+    typeof evidenceBundlePublicId !== "string" ||
+    !PUBLIC_ID.test(evidenceBundlePublicId) ||
+    typeof evidenceHash !== "string" ||
+    !NONZERO_BYTES32.test(evidenceHash) ||
+    typeof commitHash !== "string" ||
+    !NONZERO_BYTES32.test(commitHash) ||
+    typeof attestationExpiryUnixSeconds !== "string" ||
+    !/^[1-9][0-9]*$/u.test(attestationExpiryUnixSeconds) ||
+    typeof verifierAddress !== "string" ||
+    !ADDRESS.test(verifierAddress) ||
+    typeof signature !== "string" ||
+    !SIGNATURE_65_BYTE.test(signature) ||
+    typeof typedDataDigest !== "string" ||
+    !BYTES32.test(typedDataDigest)
+  ) {
+    throw conflict("Stored receipt attestation snapshot is invalid");
+  }
+  return {
+    evidenceBundlePublicId,
+    evidenceHash,
+    commitHash,
+    attestationExpiryUnixSeconds,
+    verifierAddress,
+    signature,
+    typedDataDigest
+  };
+}
+
+function parseReceiptIntentSnapshot(value: unknown): {
+  readonly task: TaskView;
+  readonly transaction: ChainTransactionView;
+  readonly attestation: ReceiptAttestationSnapshot;
+} {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join("\0") !==
+      ["kind", "task", "transaction", "attestation"].sort().join("\0")
+  ) {
+    throw conflict("Stored receipt intent snapshot is invalid");
+  }
+  const snapshot = value as Record<string, unknown>;
+  if (snapshot.kind !== "receipt_chain_intent") {
+    throw conflict("Stored receipt intent snapshot is invalid");
+  }
+  return {
+    task: parseTaskSnapshot(snapshot.task),
+    transaction: parseChainSnapshot(snapshot.transaction),
+    attestation: parseReceiptAttestationSnapshot(snapshot.attestation)
   };
 }
 
@@ -950,6 +1101,249 @@ export class DrizzleTaskRepository {
           projectId: scope.task.projectId,
           taskId: scope.task.id,
           action: "chain.wallet_requested",
+          metadataSafeJson: { transactionPublicId: input.publicId }
+        });
+        return { task: initialTask, transaction: initial, replayed: false };
+      });
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  /**
+   * Returns the most recent passing evidence bundle for a task, or `null` if
+   * none exists. Used to build the verifier attestation before creating a
+   * receipt chain intent; the intent creation itself re-derives and re-checks
+   * this independently inside its own transaction.
+   */
+  public async getLatestPassingEvidence(
+    taskPublicId: string
+  ): Promise<EligiblePassingEvidence | null> {
+    assertPublicId(taskPublicId, "Task public ID");
+    try {
+      const [task] = await this.database
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(eq(tasks.publicId, taskPublicId))
+        .limit(1);
+      if (!task) return null;
+      const [bundle] = await this.database
+        .select({
+          publicId: evidenceBundles.publicId,
+          evidenceHash: evidenceBundles.evidenceHash,
+          commitHashDerived: evidenceBundles.commitHashDerived,
+          gitObjectId: evidenceBundles.gitObjectId
+        })
+        .from(evidenceBundles)
+        .where(and(eq(evidenceBundles.taskId, task.id), eq(evidenceBundles.passing, true)))
+        .orderBy(desc(evidenceBundles.createdAt))
+        .limit(1);
+      return bundle ?? null;
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  /**
+   * Creates a `submit_receipt` chain-transaction intent for the task's assignee.
+   *
+   * Mirrors {@link createChainIntent} but is authorized to the assignee wallet
+   * (not the creator), requires the task to be chain-confirmed open, requires a
+   * passing evidence bundle, and additionally persists the verifier attestation
+   * used to build the `submitReceipt` wallet call. The caller (the web handler)
+   * signs the attestation before invoking this method; this method never signs
+   * anything and never reads process configuration, it only structurally
+   * validates and persists what it is given.
+   */
+  public async createReceiptChainIntent(input: CreateReceiptChainIntentInput): Promise<{
+    readonly task: TaskView;
+    readonly transaction: ChainTransactionView;
+    readonly replayed: boolean;
+  }> {
+    assertUuid(input.actorUserId);
+    assertPublicId(input.taskPublicId, "Task public ID");
+    assertPublicId(input.publicId, "Transaction public ID");
+    assertPublicId(input.evidenceBundlePublicId, "Evidence bundle public ID");
+    assertAddress(input.assigneeWallet, "Assignee wallet");
+    assertHash(input.evidenceHash, "Evidence hash");
+    assertHash(input.commitHash, "Commit hash");
+    assertAddress(input.verifierAddress, "Verifier address");
+    assertHash(input.typedDataDigest, "Typed data digest");
+    assertDate(input.requestedAt, "Receipt intent creation time");
+    if (!SIGNATURE_65_BYTE.test(input.signature)) {
+      throw invalid("Verifier signature must be a 65-byte lowercase hex value");
+    }
+    if (!/^[1-9][0-9]*$/u.test(input.attestationExpiryUnixSeconds)) {
+      throw invalid("Attestation expiry must be a positive decimal string");
+    }
+    const expiry = BigInt(input.attestationExpiryUnixSeconds);
+    if (expiry > UINT64_MAX) throw invalid("Attestation expiry exceeds uint64");
+    if (expiry * 1000n <= BigInt(input.requestedAt.getTime())) {
+      throw invalid("Attestation is already expired");
+    }
+    const idempotency: IdempotencyContext = {
+      actorScope: `user:${input.actorUserId}`,
+      operation: "receipt_intent_create",
+      idempotencyKey: input.idempotencyKey,
+      requestHash: input.requestHash,
+      expiresAt: new Date(input.requestedAt.getTime() + 24 * 60 * 60 * 1000)
+    };
+    assertIdempotency(idempotency, input.actorUserId, "receipt_intent_create");
+    try {
+      return await this.database.transaction(async (transaction) => {
+        const scope = await this.requireTaskMembership(
+          transaction,
+          input.taskPublicId,
+          input.actorUserId,
+          "update"
+        );
+        const inserted = await transaction
+          .insert(chainTransactions)
+          .values({
+            publicId: input.publicId,
+            userId: input.actorUserId,
+            projectId: scope.task.projectId,
+            taskId: scope.task.id,
+            intentType: "submit_receipt",
+            idempotencyKey: idempotency.idempotencyKey,
+            requestHash: idempotency.requestHash,
+            chainId: scope.task.chainId,
+            fromAddress: scope.task.assigneeWallet,
+            toAddress: scope.task.contractAddress,
+            status: "wallet_requested",
+            createdAt: input.requestedAt,
+            updatedAt: input.requestedAt
+          })
+          .onConflictDoNothing({
+            target: [
+              chainTransactions.userId,
+              chainTransactions.intentType,
+              chainTransactions.idempotencyKey
+            ]
+          })
+          .returning();
+        if (!inserted[0]) {
+          return {
+            ...(await this.replayReceiptChainIntent(
+              transaction,
+              scope,
+              input.publicId,
+              idempotency
+            )),
+            replayed: true
+          };
+        }
+        if (scope.projectStatus !== "active") {
+          throw new DatabaseServiceError(
+            "DB_PROJECT_ARCHIVED",
+            "Archived projects cannot create receipt intents"
+          );
+        }
+        if (scope.task.assigneeWallet !== input.assigneeWallet) {
+          throw new DatabaseServiceError(
+            "DB_INVALID_INPUT",
+            "Only the task assignee wallet may submit a receipt"
+          );
+        }
+        if (scope.task.chainStatus !== "open" || scope.task.offchainStatus !== "open") {
+          throw conflict("Task is not eligible for a receipt intent");
+        }
+        if (scope.task.deadline !== null && scope.task.deadline <= input.requestedAt) {
+          throw conflict("Task deadline elapsed before receipt submission");
+        }
+        const existingIntents = await transaction
+          .select({ id: chainTransactions.id, status: chainTransactions.status })
+          .from(chainTransactions)
+          .where(
+            and(
+              eq(chainTransactions.taskId, scope.task.id),
+              eq(chainTransactions.intentType, "submit_receipt"),
+              ne(chainTransactions.id, inserted[0].id)
+            )
+          )
+          .for("update");
+        if (
+          existingIntents.some(
+            (row) => row.status !== "rejected_by_user" && row.status !== "reverted"
+          )
+        ) {
+          throw conflict("Task already has a pending or confirmed receipt intent");
+        }
+        const [bundle] = await transaction
+          .select()
+          .from(evidenceBundles)
+          .where(
+            and(
+              eq(evidenceBundles.publicId, input.evidenceBundlePublicId),
+              eq(evidenceBundles.taskId, scope.task.id)
+            )
+          )
+          .for("share")
+          .limit(1);
+        if (
+          !bundle ||
+          !bundle.passing ||
+          bundle.evidenceHash !== input.evidenceHash ||
+          bundle.commitHashDerived !== input.commitHash
+        ) {
+          throw invalid("Evidence bundle binding is not a passing bundle for this task");
+        }
+        const [mostRecentPassing] = await transaction
+          .select({ id: evidenceBundles.id })
+          .from(evidenceBundles)
+          .where(and(eq(evidenceBundles.taskId, scope.task.id), eq(evidenceBundles.passing, true)))
+          .orderBy(desc(evidenceBundles.createdAt))
+          .limit(1);
+        if (!mostRecentPassing || mostRecentPassing.id !== bundle.id) {
+          throw conflict("A newer passing evidence bundle exists for this task");
+        }
+        const attestationRows = await transaction
+          .insert(receiptAttestations)
+          .values({
+            chainTransactionId: inserted[0].id,
+            taskId: scope.task.id,
+            evidenceBundleId: bundle.id,
+            evidenceHash: input.evidenceHash,
+            commitHash: input.commitHash,
+            attestationExpiry: expiry,
+            verifierAddress: input.verifierAddress,
+            signature: input.signature,
+            typedDataDigest: input.typedDataDigest
+          })
+          .returning({ id: receiptAttestations.id });
+        if (!attestationRows[0]) throw conflict("Receipt attestation insert returned no row");
+        const initial = await this.chainView(transaction, inserted[0], input.taskPublicId);
+        const initialTask = taskView(scope);
+        const attestationSnapshot: ReceiptAttestationSnapshot = {
+          evidenceBundlePublicId: input.evidenceBundlePublicId,
+          evidenceHash: input.evidenceHash,
+          commitHash: input.commitHash,
+          attestationExpiryUnixSeconds: input.attestationExpiryUnixSeconds,
+          verifierAddress: input.verifierAddress,
+          signature: input.signature,
+          typedDataDigest: input.typedDataDigest
+        };
+        const snapshotRows = await transaction
+          .update(chainTransactions)
+          .set({
+            responseSafeJson: {
+              kind: "receipt_chain_intent",
+              task: taskSnapshot(initialTask),
+              transaction: chainSnapshot(initial),
+              attestation: attestationSnapshot
+            } satisfies ReceiptIntentSnapshot,
+            responseStatus: 201
+          })
+          .where(eq(chainTransactions.id, inserted[0].id))
+          .returning({ id: chainTransactions.id });
+        if (snapshotRows.length !== 1) {
+          throw conflict("Receipt intent snapshot could not be persisted");
+        }
+        await transaction.insert(auditEvents).values({
+          actorUserId: input.actorUserId,
+          projectId: scope.task.projectId,
+          taskId: scope.task.id,
+          action: "chain.receipt_wallet_requested",
           metadataSafeJson: { transactionPublicId: input.publicId }
         });
         return { task: initialTask, transaction: initial, replayed: false };
@@ -1511,6 +1905,91 @@ export class DrizzleTaskRepository {
     }
   }
 
+  /**
+   * Reads reconciliation context for a `submit_receipt` chain transaction.
+   *
+   * Unlike {@link getTaskChainReconciliationContext}, any project member who
+   * owns the transaction may reconcile it (the assignee submitting a receipt
+   * need not be the project owner); the query still requires the caller to be
+   * the transaction's own `userId`, so no other member can reconcile someone
+   * else's pending receipt submission.
+   */
+  public async getReceiptChainReconciliationContext(
+    transactionPublicId: string,
+    actorUserId: string
+  ): Promise<ReceiptChainReconciliationContext | null> {
+    assertPublicId(transactionPublicId, "Transaction public ID");
+    assertUuid(actorUserId);
+    try {
+      const [row] = await this.database
+        .select({
+          transaction: chainTransactions,
+          taskPublicId: tasks.publicId,
+          chainTaskId: tasks.chainTaskId,
+          assigneeWallet: tasks.assigneeWallet,
+          contractAddress: tasks.contractAddress,
+          chainId: tasks.chainId,
+          memberUserId: projectMembers.userId,
+          attestation: receiptAttestations
+        })
+        .from(chainTransactions)
+        .innerJoin(tasks, eq(tasks.id, chainTransactions.taskId))
+        .innerJoin(
+          projectMembers,
+          and(
+            eq(projectMembers.projectId, chainTransactions.projectId),
+            eq(projectMembers.userId, actorUserId)
+          )
+        )
+        .innerJoin(
+          receiptAttestations,
+          eq(receiptAttestations.chainTransactionId, chainTransactions.id)
+        )
+        .where(
+          and(
+            eq(chainTransactions.publicId, transactionPublicId),
+            eq(chainTransactions.intentType, "submit_receipt")
+          )
+        )
+        .limit(1);
+      if (
+        !row ||
+        !row.transaction.taskId ||
+        row.transaction.userId !== actorUserId ||
+        row.memberUserId !== actorUserId ||
+        row.chainTaskId === null
+      ) {
+        return null;
+      }
+      if (
+        row.transaction.status !== "submitted" &&
+        row.transaction.status !== "unknown_reconcile"
+      ) {
+        return null;
+      }
+      if (row.transaction.transactionHash === null) return null;
+      assertChainId(row.chainId);
+      assertChainId(row.transaction.chainId);
+      return {
+        transactionPublicId: row.transaction.publicId,
+        transactionHash: row.transaction.transactionHash as `0x${string}`,
+        status: row.transaction.status as "submitted" | "unknown_reconcile",
+        chainId: row.transaction.chainId,
+        contractAddress: row.contractAddress,
+        taskPublicId: row.taskPublicId,
+        chainTaskId: row.chainTaskId.toString(),
+        assigneeWallet: row.assigneeWallet,
+        evidenceHash: row.attestation.evidenceHash,
+        commitHash: row.attestation.commitHash,
+        attestationExpiryUnixSeconds: row.attestation.attestationExpiry.toString(),
+        verifierAddress: row.attestation.verifierAddress,
+        typedDataDigest: row.attestation.typedDataDigest
+      };
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
   public async markTransactionUnknown(input: {
     readonly transactionPublicId: string;
     readonly expectedStatus: "wallet_requested" | "submitted" | "unknown_reconcile";
@@ -1776,6 +2255,141 @@ export class DrizzleTaskRepository {
     }
   }
 
+  /**
+   * Confirms a `submit_receipt` chain transaction from a decoded `ReceiptSubmitted`
+   * event. Mirrors {@link confirmTaskCreatedFromReconciliation}: idempotent on a
+   * repeated confirmation, records the event uniquely by chain/tx/log index, and
+   * flips the task to `receipt_submitted` on both the offchain and chain status.
+   */
+  public async confirmReceiptSubmittedFromReconciliation(
+    input: ConfirmReceiptSubmittedInput
+  ): Promise<ChainTransactionView | null> {
+    assertPublicId(input.transactionPublicId, "Transaction public ID");
+    assertDate(input.reconciledAt, "Reconciliation time");
+    if (!/^0x[0-9a-f]{64}$/u.test(input.blockHash)) {
+      throw invalid("Confirmed block hash must be a 32-byte lowercase hex value");
+    }
+    if (input.blockNumber < 0n) throw invalid("Confirmed block number must be non-negative");
+    if (!Number.isSafeInteger(input.logIndex) || input.logIndex < 0) {
+      throw invalid("Confirmed log index must be a non-negative safe integer");
+    }
+    try {
+      return await this.database.transaction(async (transaction) => {
+        const [chainRow] = await transaction
+          .select()
+          .from(chainTransactions)
+          .where(
+            and(
+              eq(chainTransactions.publicId, input.transactionPublicId),
+              eq(chainTransactions.intentType, "submit_receipt")
+            )
+          )
+          .for("update")
+          .limit(1);
+        if (!chainRow || !chainRow.taskId) throw notFound();
+        const [taskRow] = await transaction
+          .select()
+          .from(tasks)
+          .where(eq(tasks.id, chainRow.taskId))
+          .for("update")
+          .limit(1);
+        if (!taskRow) throw notFound();
+        const [attestation] = await transaction
+          .select()
+          .from(receiptAttestations)
+          .where(eq(receiptAttestations.chainTransactionId, chainRow.id))
+          .for("share")
+          .limit(1);
+        if (!attestation) throw notFound();
+        if (chainRow.status === "confirmed" && taskRow.chainStatus === "receipt_submitted") {
+          return this.chainView(transaction, chainRow, taskRow.publicId);
+        }
+        if (chainRow.status !== input.expectedStatus) {
+          throw conflict("Chain transaction state changed");
+        }
+        if (chainRow.transactionHash === null) {
+          throw invalid("A transaction without a hash cannot be confirmed");
+        }
+        const existingEvent = await transaction
+          .select({ id: contractEvents.id })
+          .from(contractEvents)
+          .where(
+            and(
+              eq(contractEvents.chainId, chainRow.chainId),
+              eq(contractEvents.transactionHash, chainRow.transactionHash),
+              eq(contractEvents.logIndex, input.logIndex)
+            )
+          )
+          .for("update")
+          .limit(1);
+        if (existingEvent.length > 0) {
+          throw conflict(
+            "ReceiptSubmitted event already indexed for this transaction and log index"
+          );
+        }
+        await transaction.insert(contractEvents).values({
+          chainId: chainRow.chainId,
+          contractAddress: taskRow.contractAddress,
+          transactionHash: chainRow.transactionHash,
+          logIndex: input.logIndex,
+          eventName: "ReceiptSubmitted",
+          decodedJson: {
+            taskId: taskRow.chainTaskId?.toString() ?? "0",
+            assignee: taskRow.assigneeWallet,
+            evidenceHash: attestation.evidenceHash,
+            commitHash: attestation.commitHash
+          },
+          blockHash: input.blockHash,
+          blockNumber: input.blockNumber,
+          removed: false
+        });
+        const [confirmedTransaction] = await transaction
+          .update(chainTransactions)
+          .set({
+            status: "confirmed",
+            blockNumber: input.blockNumber,
+            failureCode: null,
+            updatedAt: input.reconciledAt
+          })
+          .where(eq(chainTransactions.id, chainRow.id))
+          .returning();
+        const [confirmedTask] = await transaction
+          .update(tasks)
+          .set({
+            offchainStatus: "receipt_submitted",
+            chainStatus: "receipt_submitted",
+            updatedAt: input.reconciledAt
+          })
+          .where(eq(tasks.id, taskRow.id))
+          .returning();
+        if (!confirmedTransaction || !confirmedTask) {
+          throw conflict("Confirmation update lost a race");
+        }
+        await transaction.insert(auditEvents).values([
+          {
+            projectId: taskRow.projectId,
+            taskId: taskRow.id,
+            action: "chain.confirmed",
+            metadataSafeJson: {
+              transactionPublicId: chainRow.publicId,
+              transactionHash: chainRow.transactionHash,
+              blockNumber: input.blockNumber.toString()
+            }
+          },
+          {
+            projectId: taskRow.projectId,
+            taskId: taskRow.id,
+            action: "task.receipt_submitted",
+            metadataSafeJson: { evidenceHash: attestation.evidenceHash }
+          }
+        ]);
+        return this.chainView(transaction, confirmedTransaction, confirmedTask.publicId);
+      });
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
   private taskReadQuery(
     actorUserId: string,
     projectPublicId?: string,
@@ -1872,6 +2486,43 @@ export class DrizzleTaskRepository {
       .for(lock)
       .limit(1);
     if (!row || row.role !== "owner" || row.ownerUserId !== row.memberUserId) throw notFound();
+    return row;
+  }
+
+  /**
+   * Same lookup as {@link requireTaskOwner} but for any project member
+   * (owner or member). Used by receipt submission, which is authorized to the
+   * task's assignee wallet rather than the project owner; the assignee must
+   * still be a registered project member.
+   */
+  private async requireTaskMembership(
+    transaction: Transaction,
+    taskPublicId: string,
+    actorUserId: string,
+    lock: "share" | "update"
+  ): Promise<OwnedTask> {
+    const [row] = await transaction
+      .select({
+        task: tasks,
+        projectPublicId: projects.publicId,
+        repositoryUrl: projects.repositoryUrl,
+        policyPublicId: policies.publicId,
+        projectStatus: projects.status,
+        ownerUserId: projects.ownerUserId,
+        memberUserId: projectMembers.userId,
+        role: projectMembers.role
+      })
+      .from(tasks)
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .innerJoin(policies, eq(policies.id, tasks.policyId))
+      .innerJoin(
+        projectMembers,
+        and(eq(projectMembers.projectId, tasks.projectId), eq(projectMembers.userId, actorUserId))
+      )
+      .where(eq(tasks.publicId, taskPublicId))
+      .for(lock)
+      .limit(1);
+    if (!row) throw notFound();
     return row;
   }
 
@@ -2044,6 +2695,45 @@ export class DrizzleTaskRepository {
     return snapshot;
   }
 
+  private async replayReceiptChainIntent(
+    transaction: Transaction,
+    scope: Pick<OwnedTask, "task">,
+    transactionPublicId: string,
+    idempotency: IdempotencyContext
+  ): Promise<{ readonly task: TaskView; readonly transaction: ChainTransactionView }> {
+    const [row] = await transaction
+      .select()
+      .from(chainTransactions)
+      .where(
+        and(
+          eq(chainTransactions.userId, idempotency.actorScope.slice(5)),
+          eq(chainTransactions.intentType, "submit_receipt"),
+          eq(chainTransactions.idempotencyKey, idempotency.idempotencyKey)
+        )
+      )
+      .for("share")
+      .limit(1);
+    if (
+      !row ||
+      row.requestHash !== idempotency.requestHash ||
+      row.publicId !== transactionPublicId ||
+      row.taskId !== scope.task.id ||
+      row.responseStatus !== 201 ||
+      row.responseSafeJson === null
+    ) {
+      throw new DatabaseServiceError("DB_IDEMPOTENCY_CONFLICT", "Receipt intent replay conflicts");
+    }
+    const snapshot = parseReceiptIntentSnapshot(row.responseSafeJson);
+    if (
+      snapshot.transaction.publicId !== transactionPublicId ||
+      snapshot.transaction.taskPublicId !== scope.task.publicId ||
+      snapshot.task.publicId !== scope.task.publicId
+    ) {
+      throw conflict("Receipt intent replay snapshot binding is invalid");
+    }
+    return snapshot;
+  }
+
   private async replayReplacement(
     transaction: Transaction,
     scope: Pick<OwnedTask, "task">,
@@ -2103,7 +2793,7 @@ export class DrizzleTaskRepository {
       schemaVersion: 1,
       publicId: row.publicId,
       taskPublicId,
-      intentType: "create_task",
+      intentType: row.intentType,
       idempotencyKey: row.idempotencyKey,
       chainId: row.chainId,
       fromAddress: row.fromAddress,

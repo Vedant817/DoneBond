@@ -4,10 +4,14 @@ import test from "node:test";
 import { DatabaseServiceError, DrizzleTaskRepository } from "../dist/index.js";
 
 const VALID_PUBLIC_ID = "01arz3ndektsv4rrffq69g5fav";
+const OTHER_PUBLIC_ID = "01arz3ndektsv4rrffq69g5fb0";
 const VALID_UUID = "018f4f6c-5b5a-4b4f-8a8b-7d3d6f95e001";
 const HASH = `0x${"ab".repeat(32)}`;
+const ADDRESS = `0x${"11".repeat(20)}`;
+const SIGNATURE = `0x${"cd".repeat(65)}`;
 const NOW = new Date("2026-07-17T14:00:00.000Z");
 const IDEMPOTENCY_KEY = "task-key-0123456789abcdef";
+const FUTURE_EXPIRY = String(Math.floor(NOW.getTime() / 1000) + 3600);
 
 function emptyDatabase() {
   const fail = () => {
@@ -349,5 +353,100 @@ test("DrizzleTaskRepository rejects reconciliation proposals with malformed iden
       failureCode: "RPC_TIMEOUT"
     }),
     "Reconciliation status transition is invalid"
+  );
+});
+
+test("DrizzleTaskRepository rejects receipt intent proposals with malformed identities, signatures, or expiry", async () => {
+  const repo = repository();
+  const validInput = {
+    actorUserId: VALID_UUID,
+    taskPublicId: VALID_PUBLIC_ID,
+    publicId: OTHER_PUBLIC_ID,
+    assigneeWallet: ADDRESS,
+    evidenceBundlePublicId: VALID_PUBLIC_ID,
+    evidenceHash: HASH,
+    commitHash: HASH,
+    attestationExpiryUnixSeconds: FUTURE_EXPIRY,
+    verifierAddress: ADDRESS,
+    signature: SIGNATURE,
+    typedDataDigest: HASH,
+    idempotencyKey: IDEMPOTENCY_KEY,
+    requestHash: HASH,
+    requestedAt: NOW
+  };
+
+  await assertInvalidInput(
+    repo.createReceiptChainIntent({ ...validInput, actorUserId: "not-a-uuid" }),
+    "Actor user ID is invalid"
+  );
+  await assertInvalidInput(
+    repo.createReceiptChainIntent({ ...validInput, taskPublicId: "not-a-public-id" }),
+    "Task public ID is invalid"
+  );
+  await assertInvalidInput(
+    repo.createReceiptChainIntent({ ...validInput, assigneeWallet: "0xnotanaddress" }),
+    "Assignee wallet must be a lowercase nonzero address"
+  );
+  await assertInvalidInput(
+    repo.createReceiptChainIntent({ ...validInput, evidenceHash: "not-a-hash" }),
+    "Evidence hash must be a lowercase nonzero bytes32"
+  );
+  await assertInvalidInput(
+    repo.createReceiptChainIntent({ ...validInput, signature: "0xtooshort" }),
+    "Verifier signature must be a 65-byte lowercase hex value"
+  );
+  await assertInvalidInput(
+    repo.createReceiptChainIntent({ ...validInput, attestationExpiryUnixSeconds: "0" }),
+    "Attestation expiry must be a positive decimal string"
+  );
+  await assertInvalidInput(
+    repo.createReceiptChainIntent({
+      ...validInput,
+      attestationExpiryUnixSeconds: String(Math.floor(NOW.getTime() / 1000) - 3600)
+    }),
+    "Attestation is already expired"
+  );
+  await assertInvalidInput(
+    repo.createReceiptChainIntent({ ...validInput, requestedAt: new Date("invalid") }),
+    "Receipt intent creation time"
+  );
+});
+
+test("DrizzleTaskRepository rejects receipt confirmation proposals with malformed hashes or indices", async () => {
+  const repo = repository();
+  const validInput = {
+    transactionPublicId: VALID_PUBLIC_ID,
+    expectedStatus: "submitted",
+    blockHash: HASH,
+    blockNumber: 10n,
+    logIndex: 0,
+    reconciledAt: NOW
+  };
+
+  await assertInvalidInput(
+    repo.confirmReceiptSubmittedFromReconciliation({
+      ...validInput,
+      transactionPublicId: "not-a-public-id"
+    }),
+    "Transaction public ID is invalid"
+  );
+  await assertInvalidInput(
+    repo.confirmReceiptSubmittedFromReconciliation({ ...validInput, blockHash: "not-a-hash" }),
+    "Confirmed block hash must be a 32-byte lowercase hex value"
+  );
+  await assertInvalidInput(
+    repo.confirmReceiptSubmittedFromReconciliation({ ...validInput, blockNumber: -1n }),
+    "Confirmed block number must be non-negative"
+  );
+  await assertInvalidInput(
+    repo.confirmReceiptSubmittedFromReconciliation({ ...validInput, logIndex: -1 }),
+    "Confirmed log index must be a non-negative safe integer"
+  );
+  await assertInvalidInput(
+    repo.confirmReceiptSubmittedFromReconciliation({
+      ...validInput,
+      reconciledAt: new Date("bad")
+    }),
+    "Reconciliation time"
   );
 });

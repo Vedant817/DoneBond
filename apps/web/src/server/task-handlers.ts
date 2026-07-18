@@ -91,7 +91,8 @@ export interface TaskListCursor {
 export interface ChainTransactionRecord {
   readonly publicId: string;
   readonly taskPublicId: string;
-  readonly intentType: "create_task";
+  readonly intentType:
+    "create_task" | "submit_receipt" | "approve" | "reject" | "cancel" | "withdraw";
   readonly idempotencyKey: string;
   readonly chainId: number;
   readonly fromAddress: string;

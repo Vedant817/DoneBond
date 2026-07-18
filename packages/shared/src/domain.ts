@@ -309,7 +309,12 @@ export const PASSING_RECEIPT_SOLIDITY_TYPE =
   "PassingReceipt(uint256 taskId,bytes32 taskHash,bytes32 policyHash,address assignee,bytes32 evidenceHash,bytes32 commitHash,uint64 attestationExpiry)" as const;
 export const PASSING_RECEIPT_TYPEHASH = keccak256(toBytes(PASSING_RECEIPT_SOLIDITY_TYPE));
 
-const PassingReceiptTypes = {
+/**
+ * The exact EIP-712 typed-data type definition for `PassingReceipt`, exported so
+ * a signer (for example, the server's verifier signing module) can produce a
+ * signature over precisely the same domain/types/message this module hashes.
+ */
+export const PASSING_RECEIPT_TYPES = {
   PassingReceipt: [
     { name: "taskId", type: "uint256" },
     { name: "taskHash", type: "bytes32" },
@@ -320,6 +325,7 @@ const PassingReceiptTypes = {
     { name: "attestationExpiry", type: "uint64" }
   ]
 } as const;
+const PassingReceiptTypes = PASSING_RECEIPT_TYPES;
 
 export interface ReceiptAttestationDigestInput {
   readonly chainId: 143 | 10_143;

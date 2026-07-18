@@ -244,6 +244,38 @@ export function getAuthHandlers(): ReturnType<typeof createAuthHandlers> {
           windowMs: 10 * 60 * 1000
         })
       )
+    },
+    receipt_chain_intent: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "receipt_intent_global",
+          maxAttempts: 600,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "receipt_intent_subject",
+          maxAttempts: 60,
+          windowMs: 10 * 60 * 1000
+        })
+      )
+    },
+    receipt_chain_register: {
+      global: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "receipt_transaction_global",
+          maxAttempts: 1200,
+          windowMs: 10 * 60 * 1000
+        })
+      ),
+      subject: maintainedLimiter(
+        new DrizzleAuthRateLimiter(databaseHandle.db, {
+          scope: "receipt_transaction_subject",
+          maxAttempts: 120,
+          windowMs: 10 * 60 * 1000
+        })
+      )
     }
   });
   handlers = createAuthHandlers({
