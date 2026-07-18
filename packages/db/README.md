@@ -18,8 +18,7 @@ cp packages/db/.env.example packages/db/.env
 set -a
 source packages/db/.env
 set +a
-pnpm --filter @donebond/db build
-pnpm --filter @donebond/db db:migrate
+pnpm db:migrate
 ```
 
 For the deployed Vercel application, use Supabase's IPv4-compatible Supavisor

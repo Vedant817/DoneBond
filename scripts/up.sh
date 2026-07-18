@@ -41,8 +41,10 @@ echo "==> 4. Installing dependencies..."
 pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 
 echo "==> 5. Running database migrations..."
-node --experimental-strip-types packages/db/src/migrate.ts 2>/dev/null || \
-  echo "   WARNING: Migration failed — check DATABASE_URL in .env"
+if ! pnpm db:migrate; then
+  echo "   ERROR: Migration failed — check DATABASE_URL in .env"
+  exit 1
+fi
 
 echo ""
 echo "============================================"
