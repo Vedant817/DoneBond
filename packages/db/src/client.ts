@@ -22,12 +22,14 @@ export function buildPostgresOptions(
     // cannot retain session-scoped prepared statements between requests.
     prepare: false,
     ssl:
-      environment.DATABASE_SSL === "require"
-        ? {
-            rejectUnauthorized: true,
-            ...(environment.DATABASE_CA_CERT ? { ca: environment.DATABASE_CA_CERT } : {})
-          }
-        : false
+      environment.DATABASE_SSL === "disable"
+        ? false
+        : environment.DATABASE_SSL === "verify-full"
+          ? {
+              rejectUnauthorized: true,
+              ...(environment.DATABASE_CA_CERT ? { ca: environment.DATABASE_CA_CERT } : {})
+            }
+          : { rejectUnauthorized: false }
   };
 }
 

@@ -28,9 +28,11 @@ direct URI restricted to migration/release tooling.
 
 Run migrations against a separate test project/database before running
 integration tests. Never point local commands at a production URL. Supabase
-requires TLS; `DATABASE_SSL=require` is this project's default and must stay
-that way for any non-loopback host — it can only be disabled for a literal
-loopback hostname (`localhost`/`127.0.0.1`/`::1`).
+requires TLS. `DATABASE_SSL=require` is this project's compatible default: it
+encrypts traffic but does not verify the server certificate. Production should
+prefer `DATABASE_SSL=verify-full` with Supabase's downloaded CA certificate in
+`DATABASE_CA_CERT`. TLS can only be disabled for a literal loopback hostname
+(`localhost`/`127.0.0.1`/`::1`).
 
 The real-PostgreSQL integration test deliberately resets the `public` schema and
 therefore requires a database whose name ends in `_test` plus an explicit guard.
@@ -76,9 +78,10 @@ create a new migration instead.
 - Contract logs are unique by `(chain_id, transaction_hash, log_index)` and also
   retain block hashes and removal state for reconciliation. Exact replay is a
   no-op; removed/canonical transitions are updated and audited atomically.
-- Database TLS uses certificate verification. `DATABASE_SSL=disable` is rejected
-  unless the database hostname is loopback; `DATABASE_CA_CERT` can provide a
-  private CA bundle without weakening `rejectUnauthorized`.
+- Database TLS supports encrypted compatibility with `DATABASE_SSL=require` and
+  certificate/hostname verification with `DATABASE_SSL=verify-full` plus
+  `DATABASE_CA_CERT`. `DATABASE_SSL=disable` is rejected unless the hostname is
+  loopback.
 - Wallet sign-in challenges persist only a SHA-256 nonce digest and bind it to the
   normalized wallet, supported chain, application domain, URI, and strict expiry.
   Consumption is a single conditional update, so concurrent signature replays

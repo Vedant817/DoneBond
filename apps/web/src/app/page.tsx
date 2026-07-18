@@ -9,14 +9,11 @@ import {
   TransactionState
 } from "@donebond/ui";
 
-// Route for milestone 6.3 (project screens, not yet built). Linking here now
-// is expected to 404 until that milestone lands -- an honest incremental
-// state, not a fabricated working page.
 const CREATE_PROJECT_PATH = "/projects/new";
 
 // Illustrative-only values for the example below. The real public receipt API
-// is available at /api/v1/receipt/[receiptId]; the authenticated product and
-// public proof screens replace this sample as their milestones land.
+// is available at /api/v1/receipt/[receiptId], and confirmed receipts have a
+// shareable page at /proof/[publicId].
 const EXAMPLE_RECEIPT = {
   taskTitle: "Add cursor pagination to GET /tasks",
   taskHash: "0x14c05321a220bffaf8c927e5d17bd3530ae6c01c527a18929e7a9baf36ae6546",
@@ -129,8 +126,8 @@ export default function HomePage() {
           </Heading>
           <Text size="md" tone="muted">
             Illustrative only — this is a mockup built from the real design-system components, not a
-            live task. Confirmed receipts are already available through the public API; the
-            shareable visual proof page is the remaining product milestone.
+            live task. Confirmed receipts are available through the public API and the shareable
+            visual proof page.
           </Text>
           <div className="landing-panel">
             <Stack gap={4}>
@@ -180,7 +177,7 @@ export default function HomePage() {
             </a>
           </div>
           <Text size="xs" tone="muted">
-            Project creation screens are still in progress — this links to where they will live.
+            Connect a Monad Testnet wallet to create and manage a project.
           </Text>
         </Stack>
       </section>

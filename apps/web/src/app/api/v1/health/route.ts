@@ -1,6 +1,8 @@
 import { checkDatabaseHealth } from "@donebond/db";
 import { loadChainConfiguration } from "@donebond/shared";
 
+import { reportDependencyFailure } from "../../../../server/health-observability.ts";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,10 @@ export async function GET(): Promise<Response> {
       checkDatabaseHealth(),
       rpcHealth(chain.rpcUrl, chain.chainId)
     ]);
+    if (database.status === "rejected") reportDependencyFailure("database", database.reason);
+    else if (!database.value) reportDependencyFailure("database");
+    if (rpc.status === "rejected") reportDependencyFailure("rpc", rpc.reason);
+    else if (!rpc.value) reportDependencyFailure("rpc");
     const status = {
       database: database.status === "fulfilled" && database.value,
       rpc: rpc.status === "fulfilled" && rpc.value
@@ -35,7 +41,8 @@ export async function GET(): Promise<Response> {
       { status: healthy ? "healthy" : "degraded", dependencies: status, checkedAt },
       { status: healthy ? 200 : 503, headers: { "cache-control": "no-store" } }
     );
-  } catch {
+  } catch (error) {
+    reportDependencyFailure("configuration", error);
     return Response.json(
       {
         status: "degraded",

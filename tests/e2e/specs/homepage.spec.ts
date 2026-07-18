@@ -8,6 +8,15 @@ test("serves the DoneBond workspace landing page", async ({ request }) => {
   );
 });
 
+test("links to the implemented project flow without stale milestone copy", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Create project" }).first()).toHaveAttribute(
+    "href",
+    "/projects/new"
+  );
+  await expect(page.getByText(/Project creation screens are still in progress/i)).toHaveCount(0);
+});
+
 test("renders the wallet-gated project flow without horizontal overflow", async ({ page }) => {
   await page.goto("/projects");
   await expect(page.getByRole("heading", { name: /Connect the wallet/i })).toBeVisible();

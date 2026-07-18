@@ -77,6 +77,9 @@ environment.
 - Use Supabase's Supavisor transaction-pooler URI for the Vercel `DATABASE_URL`;
   the runtime disables session-scoped prepared statements for compatibility.
 - Use the direct database URI only for the controlled migration release step.
+- Prefer `DATABASE_SSL=verify-full` with Supabase's downloaded CA certificate in
+  `DATABASE_CA_CERT`. `DATABASE_SSL=require` is an encrypted compatibility mode
+  when a trusted CA bundle is not configured; it does not authenticate the server.
 - Review generated migrations.
 - Back up production data before destructive changes.
 - Run migrations as a dedicated release step, not implicitly from every web process.

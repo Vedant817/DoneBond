@@ -27,14 +27,28 @@ test("database environment fails closed and defaults to TLS", () => {
       }),
     /loopback/
   );
+  assert.throws(
+    () =>
+      parseDatabaseEnvironment({
+        DATABASE_URL: "postgresql://db.example.test/donebond",
+        DATABASE_SSL: "verify-full"
+      }),
+    /DATABASE_CA_CERT/
+  );
 });
 
-test("TLS configuration is certificate-verified and supports a private CA", () => {
-  const environment = parseDatabaseEnvironment({
+test("TLS modes distinguish encrypted compatibility from certificate verification", () => {
+  const encrypted = parseDatabaseEnvironment({
+    DATABASE_URL: "postgresql://db.example.test/donebond"
+  });
+  assert.deepEqual(buildPostgresOptions(encrypted).ssl, { rejectUnauthorized: false });
+
+  const verified = parseDatabaseEnvironment({
     DATABASE_URL: "postgresql://db.example.test/donebond",
+    DATABASE_SSL: "verify-full",
     DATABASE_CA_CERT: "test-private-ca"
   });
-  const options = buildPostgresOptions(environment);
+  const options = buildPostgresOptions(verified);
   assert.deepEqual(options.ssl, { ca: "test-private-ca", rejectUnauthorized: true });
   assert.equal(options.prepare, false, "must remain compatible with transaction poolers");
 
