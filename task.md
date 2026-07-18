@@ -826,4 +826,4 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Results: All pass. `@donebond/web` typecheck/build succeed, `/` still lists as a static route in production build alongside all API routes; `@donebond/ui` test 28/28 unchanged (package not touched); format/lint clean.
 - Security/privacy notes: No fabricated install command or receipt data — both honesty constraints from the brief were independently verified against the actual state of `apps/cli/package.json` and the (at-the-time-nonexistent) public receipt API, not assumed.
 - Remaining risks/blockers: `/projects/new` is a dangling link until 6.3 lands. Milestones 6.3–6.7 still need to build the actual authenticated product screens (wallet connection, project/task CRUD) — none of that exists yet. Push blocked by the same SSH key issue noted in prior milestones.
-- Commit: pending (recorded after this work-log update is committed).
+- Commit: `db35758424e9d882272b05502669171c0046ec9a`.
