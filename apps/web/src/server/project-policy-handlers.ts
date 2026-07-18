@@ -41,7 +41,9 @@ export type ProjectWriteOperation =
   | "policy_activate"
   | "task_create"
   | "task_chain_intent"
-  | "task_chain_register";
+  | "task_chain_register"
+  | "receipt_chain_intent"
+  | "receipt_chain_register";
 
 export interface ProjectWriteRateLimiter {
   consume(operation: ProjectWriteOperation, subject: string | null, at: Date): Promise<boolean>;

@@ -14,6 +14,7 @@ import {
   policies,
   projectMembers,
   projects,
+  receiptAttestations,
   tasks,
   verificationChecks
 } from "./schema.js";
@@ -72,6 +73,49 @@ export interface EvidencePersistenceInput {
 export interface ProjectAccessRecord {
   readonly projectPublicId: string;
   readonly role: "owner" | "member";
+}
+
+export interface ReceiptCheckSummary {
+  readonly checkKey: string;
+  readonly label: string;
+  readonly required: boolean;
+  readonly status: string;
+  readonly startedAt: Date;
+  readonly durationMs: number;
+  readonly exitCode: number | null;
+  readonly signal: string | null;
+  readonly stdoutDigest: string;
+  readonly stderrDigest: string;
+  readonly stdoutPreview: string;
+  readonly stderrPreview: string;
+}
+
+export interface ReceiptRecord {
+  readonly taskPublicId: string;
+  readonly projectPublicId: string;
+  readonly chainId: number;
+  readonly contractAddress: string;
+  readonly chainTaskId: string;
+  readonly title: string;
+  readonly taskHash: string;
+  readonly policyHash: string;
+  readonly creatorWallet: string;
+  readonly assigneeWallet: string;
+  readonly rewardWei: string;
+  readonly deadline: Date | null;
+  readonly offchainStatus: string;
+  readonly chainStatus: string;
+  readonly evidencePublicId: string;
+  readonly evidenceHash: string;
+  readonly commitHashDerived: string;
+  readonly gitObjectId: string;
+  readonly checks: readonly ReceiptCheckSummary[];
+  readonly verifierAddress: string;
+  readonly signature: string;
+  readonly typedDataDigest: string;
+  readonly attestationExpiryUnixSeconds: string;
+  readonly submissionTransactionHash: string;
+  readonly submittedAt: Date;
 }
 
 function invalid(message: string): DatabaseServiceError {
@@ -858,6 +902,154 @@ export class DoneBondRepository {
     } catch (error) {
       throw translateDatabaseError(error);
     }
+  }
+
+  /**
+   * Public, no-auth receipt read for a task whose `submit_receipt` chain
+   * transaction has been confirmed. Returns `null` for any task that does not
+   * yet have a confirmed receipt (unknown task, no receipt intent, or the
+   * intent is still pending) so callers cannot distinguish "task does not
+   * exist" from "receipt not yet submitted" beyond a generic not-found.
+   */
+  public async getPublicReceipt(taskPublicId: string): Promise<ReceiptRecord | null> {
+    try {
+      const [row] = await this.database
+        .select({
+          task: tasks,
+          projectPublicId: projects.publicId,
+          transactionHash: chainTransactions.transactionHash,
+          transactionCreatedAt: chainTransactions.updatedAt,
+          attestation: receiptAttestations,
+          evidence: evidenceBundles
+        })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .innerJoin(
+          chainTransactions,
+          and(
+            eq(chainTransactions.taskId, tasks.id),
+            eq(chainTransactions.intentType, "submit_receipt"),
+            eq(chainTransactions.status, "confirmed")
+          )
+        )
+        .innerJoin(
+          receiptAttestations,
+          eq(receiptAttestations.chainTransactionId, chainTransactions.id)
+        )
+        .innerJoin(evidenceBundles, eq(evidenceBundles.id, receiptAttestations.evidenceBundleId))
+        .where(eq(tasks.publicId, taskPublicId))
+        .limit(1);
+      if (!row || row.task.chainTaskId === null || row.transactionHash === null) return null;
+      return this.receiptRecord(row);
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  /**
+   * Same data as {@link getPublicReceipt} for an authenticated project member
+   * (owner or member). Returns `null` for a nonmember, matching the existing
+   * task/evidence read conventions of not distinguishing "not found" from
+   * "not authorized".
+   */
+  public async getReceiptForMember(
+    taskPublicId: string,
+    actorUserId: string
+  ): Promise<ReceiptRecord | null> {
+    try {
+      const [row] = await this.database
+        .select({
+          task: tasks,
+          projectPublicId: projects.publicId,
+          transactionHash: chainTransactions.transactionHash,
+          transactionCreatedAt: chainTransactions.updatedAt,
+          attestation: receiptAttestations,
+          evidence: evidenceBundles
+        })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .innerJoin(
+          projectMembers,
+          and(eq(projectMembers.projectId, tasks.projectId), eq(projectMembers.userId, actorUserId))
+        )
+        .innerJoin(
+          chainTransactions,
+          and(
+            eq(chainTransactions.taskId, tasks.id),
+            eq(chainTransactions.intentType, "submit_receipt"),
+            eq(chainTransactions.status, "confirmed")
+          )
+        )
+        .innerJoin(
+          receiptAttestations,
+          eq(receiptAttestations.chainTransactionId, chainTransactions.id)
+        )
+        .innerJoin(evidenceBundles, eq(evidenceBundles.id, receiptAttestations.evidenceBundleId))
+        .where(eq(tasks.publicId, taskPublicId))
+        .limit(1);
+      if (!row || row.task.chainTaskId === null || row.transactionHash === null) return null;
+      return this.receiptRecord(row);
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  private async receiptRecord(row: {
+    readonly task: typeof tasks.$inferSelect;
+    readonly projectPublicId: string;
+    readonly transactionHash: string | null;
+    readonly transactionCreatedAt: Date;
+    readonly attestation: typeof receiptAttestations.$inferSelect;
+    readonly evidence: typeof evidenceBundles.$inferSelect;
+  }): Promise<ReceiptRecord> {
+    if (row.task.chainTaskId === null || row.transactionHash === null) {
+      throw invalid("Receipt is missing its confirmed chain task ID or transaction hash");
+    }
+    const checks = await this.database
+      .select()
+      .from(verificationChecks)
+      .where(eq(verificationChecks.evidenceBundleId, row.evidence.id))
+      .orderBy(verificationChecks.checkKey);
+    return {
+      taskPublicId: row.task.publicId,
+      projectPublicId: row.projectPublicId,
+      chainId: row.task.chainId,
+      contractAddress: row.task.contractAddress,
+      chainTaskId: row.task.chainTaskId.toString(),
+      title: row.task.title,
+      taskHash: row.task.taskHash,
+      policyHash: row.task.policyHash,
+      creatorWallet: row.task.creatorWallet,
+      assigneeWallet: row.task.assigneeWallet,
+      rewardWei: row.task.rewardWei.toString(),
+      deadline: row.task.deadline,
+      offchainStatus: row.task.offchainStatus,
+      chainStatus: row.task.chainStatus,
+      evidencePublicId: row.evidence.publicId,
+      evidenceHash: row.evidence.evidenceHash,
+      commitHashDerived: row.evidence.commitHashDerived,
+      gitObjectId: row.evidence.gitObjectId,
+      checks: checks.map((check) => ({
+        checkKey: check.checkKey,
+        label: check.label,
+        required: check.required,
+        status: check.status,
+        startedAt: check.startedAt,
+        durationMs: check.durationMs,
+        exitCode: check.exitCode,
+        signal: check.signal,
+        stdoutDigest: check.stdoutDigest,
+        stderrDigest: check.stderrDigest,
+        stdoutPreview: check.stdoutPreview,
+        stderrPreview: check.stderrPreview
+      })),
+      verifierAddress: row.attestation.verifierAddress,
+      signature: row.attestation.signature,
+      typedDataDigest: row.attestation.typedDataDigest,
+      attestationExpiryUnixSeconds: row.attestation.attestationExpiry.toString(),
+      submissionTransactionHash: row.transactionHash,
+      submittedAt: row.transactionCreatedAt
+    };
   }
 
   /**

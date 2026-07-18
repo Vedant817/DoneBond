@@ -47,6 +47,7 @@ test("schema exposes every MVP entity", () => {
     "policies",
     "projectMembers",
     "projects",
+    "receiptAttestations",
     "tasks",
     "users",
     "verificationChecks",

@@ -419,6 +419,93 @@ test("getEvidence returns null for an unknown ID and a full detail record otherw
   assert.deepEqual(detail, { ...bundleRow, checks: [checkRow] });
 });
 
+function receiptRow() {
+  return {
+    task: {
+      publicId,
+      chainId: 10_143,
+      contractAddress: `0x${"1".repeat(40)}`,
+      chainTaskId: 42n,
+      title: "Fix rate limit",
+      taskHash: hash,
+      policyHash: hash,
+      creatorWallet: `0x${"2".repeat(40)}`,
+      assigneeWallet: `0x${"3".repeat(40)}`,
+      rewardWei: 0n,
+      deadline: null,
+      offchainStatus: "receipt_submitted",
+      chainStatus: "receipt_submitted"
+    },
+    projectPublicId: publicId,
+    transactionHash: hash,
+    transactionCreatedAt: new Date("2026-07-17T00:00:00.000Z"),
+    attestation: {
+      verifierAddress: `0x${"4".repeat(40)}`,
+      signature: `0x${"5".repeat(130)}`,
+      typedDataDigest: hash,
+      attestationExpiry: 2_000_000_000n
+    },
+    evidence: {
+      id: "00000000-0000-4000-8000-000000000006",
+      publicId,
+      evidenceHash: hash,
+      commitHashDerived: hash,
+      gitObjectId: "a".repeat(40)
+    }
+  };
+}
+
+const receiptCheckRow = {
+  checkKey: "Test.Unit",
+  label: "Unit tests",
+  required: true,
+  status: "passed",
+  startedAt: new Date("2026-07-17T00:00:00.000Z"),
+  durationMs: 5,
+  exitCode: 0,
+  signal: null,
+  stdoutDigest: hash,
+  stderrDigest: hash,
+  stdoutPreview: "",
+  stderrPreview: ""
+};
+
+test("getPublicReceipt returns null without a confirmed receipt and a full record otherwise", async () => {
+  const missing = createFakeDatabase({ selects: [[]] });
+  assert.equal(await new DoneBondRepository(missing).getPublicReceipt(publicId), null);
+
+  const found = createFakeDatabase({ selects: [[receiptRow()], [receiptCheckRow]] });
+  const receipt = await new DoneBondRepository(found).getPublicReceipt(publicId);
+  assert.equal(receipt.taskPublicId, publicId);
+  assert.equal(receipt.chainTaskId, "42");
+  assert.equal(receipt.submissionTransactionHash, hash);
+  assert.equal(receipt.verifierAddress, `0x${"4".repeat(40)}`);
+  assert.equal(receipt.attestationExpiryUnixSeconds, "2000000000");
+  assert.deepEqual(receipt.checks, [receiptCheckRow]);
+
+  const noChainTaskId = createFakeDatabase({
+    selects: [[{ ...receiptRow(), task: { ...receiptRow().task, chainTaskId: null } }]]
+  });
+  assert.equal(await new DoneBondRepository(noChainTaskId).getPublicReceipt(publicId), null);
+});
+
+test("getReceiptForMember returns the same record shape for an authenticated member", async () => {
+  const missing = createFakeDatabase({ selects: [[]] });
+  assert.equal(
+    await new DoneBondRepository(missing).getReceiptForMember(publicId, ids.testOnlyTokenId),
+    null
+  );
+
+  const found = createFakeDatabase({ selects: [[receiptRow()], [receiptCheckRow]] });
+  const receipt = await new DoneBondRepository(found).getReceiptForMember(
+    publicId,
+    ids.testOnlyTokenId
+  );
+  assert.equal(receipt.evidenceHash, hash);
+  assert.equal(receipt.assigneeWallet, `0x${"3".repeat(40)}`);
+  assert.deepEqual(receipt.checks, [receiptCheckRow]);
+});
+
 test("contract event exact replay is a no-op while removed transition is audited", async () => {
   const event = {
     id: 1n,

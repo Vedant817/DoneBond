@@ -75,6 +75,18 @@ function chainTransactionChainIdColumn(): AnyPgColumn {
   return chainTransactions.chainId;
 }
 
+function chainTransactionTaskIdColumn(): AnyPgColumn {
+  return chainTransactions.taskId;
+}
+
+function evidenceBundleIdColumn(): AnyPgColumn {
+  return evidenceBundles.id;
+}
+
+function evidenceBundleTaskIdColumn(): AnyPgColumn {
+  return evidenceBundles.taskId;
+}
+
 export const projectVisibility = pgEnum("project_visibility", ["private", "public"]);
 export const projectStatus = pgEnum("project_status", ["active", "archived"]);
 export const projectRole = pgEnum("project_role", ["owner", "member"]);
@@ -487,6 +499,7 @@ export const evidenceBundles = pgTable(
   (table) => [
     unique("evidence_public_id_unique").on(table.publicId),
     unique("evidence_task_hash_unique").on(table.taskId, table.evidenceHash),
+    unique("evidence_id_task_unique").on(table.id, table.taskId),
     unique("evidence_token_idempotency_unique").on(table.submittedByTokenId, table.idempotencyKey),
     foreignKey({
       columns: [table.taskId, table.policyId, table.projectId],
@@ -580,6 +593,7 @@ export const chainTransactions = pgTable(
   },
   (table) => [
     unique("chain_transactions_public_id_unique").on(table.publicId),
+    unique("chain_transactions_id_task_unique").on(table.id, table.taskId),
     unique("chain_transactions_replacement_scope_unique").on(
       table.id,
       table.userId,
@@ -641,6 +655,48 @@ export const chainTransactions = pgTable(
       "chain_transactions_response_complete",
       sql`(${table.responseSafeJson} is null and ${table.responseStatus} is null) or (${table.responseSafeJson} is not null and ${table.responseStatus} between 200 and 299)`
     )
+  ]
+);
+
+export const receiptAttestations = pgTable(
+  "receipt_attestations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chainTransactionId: uuid("chain_transaction_id").notNull(),
+    taskId: uuid("task_id").notNull(),
+    evidenceBundleId: uuid("evidence_bundle_id").notNull(),
+    evidenceHash: varchar("evidence_hash", { length: 66 }).notNull(),
+    commitHash: varchar("commit_hash", { length: 66 }).notNull(),
+    attestationExpiry: bigint("attestation_expiry", { mode: "bigint" }).notNull(),
+    verifierAddress: varchar("verifier_address", { length: 42 }).notNull(),
+    signature: varchar("signature", { length: 132 }).notNull(),
+    typedDataDigest: varchar("typed_data_digest", { length: 66 }).notNull(),
+    createdAt
+  },
+  (table) => [
+    unique("receipt_attestations_chain_transaction_unique").on(table.chainTransactionId),
+    unique("receipt_attestations_id_task_unique").on(table.id, table.taskId),
+    foreignKey({
+      columns: [table.chainTransactionId, table.taskId],
+      foreignColumns: [chainTransactionIdColumn(), chainTransactionTaskIdColumn()],
+      name: "receipt_attestations_chain_transaction_task_fk"
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.evidenceBundleId, table.taskId],
+      foreignColumns: [evidenceBundleIdColumn(), evidenceBundleTaskIdColumn()],
+      name: "receipt_attestations_evidence_bundle_task_fk"
+    }),
+    index("receipt_attestations_task_idx").on(table.taskId),
+    check(
+      "receipt_attestations_verifier_address_format",
+      sql`${table.verifierAddress} ~ '^0x[0-9a-f]{40}$'`
+    ),
+    check("receipt_attestations_signature_format", sql`${table.signature} ~ '^0x[0-9a-f]{130}$'`),
+    check(
+      "receipt_attestations_hashes_format",
+      sql`${table.evidenceHash} ~ '^0x[0-9a-f]{64}$' and ${table.commitHash} ~ '^0x[0-9a-f]{64}$' and ${table.typedDataDigest} ~ '^0x[0-9a-f]{64}$'`
+    ),
+    check("receipt_attestations_expiry_positive", sql`${table.attestationExpiry} > 0`)
   ]
 );
 
@@ -753,6 +809,7 @@ export const databaseSchema = {
   policies,
   projectMembers,
   projects,
+  receiptAttestations,
   tasks,
   users,
   verificationChecks,

@@ -36,17 +36,34 @@ export function correlationId(request: Request): string {
   return supplied !== undefined && CORRELATION_ID.test(supplied) ? supplied : randomUUID();
 }
 
-function responseHeaders(id: string): HeadersInit {
+function responseHeaders(id: string, cacheControl: string): HeadersInit {
   return {
-    "cache-control": "no-store",
+    "cache-control": cacheControl,
     "content-type": "application/json; charset=utf-8",
     "x-content-type-options": "nosniff",
     "x-correlation-id": id
   };
 }
 
-export function jsonResponse(value: unknown, status: number, id: string): Response {
-  return new Response(JSON.stringify(value), { status, headers: responseHeaders(id) });
+/**
+ * Serializes a JSON response. `cacheControl` defaults to `no-store`, which is
+ * correct for every authenticated or mutable endpoint in this API. Pass an
+ * explicit value only for a route whose response body represents an already
+ * terminal, publicly cacheable fact (for example, a confirmed onchain
+ * receipt) — never for a response that could still represent a pending or
+ * reconcilable chain state, which must stay `no-store` so a client cannot
+ * keep believing a stale non-final answer.
+ */
+export function jsonResponse(
+  value: unknown,
+  status: number,
+  id: string,
+  cacheControl = "no-store"
+): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: responseHeaders(id, cacheControl)
+  });
 }
 
 export function errorResponse(error: unknown, id: string): Response {
