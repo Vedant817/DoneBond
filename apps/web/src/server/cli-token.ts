@@ -24,6 +24,7 @@ export interface DerivedCliToken extends GeneratedCliToken {
 }
 
 export interface CliTokenPrincipal {
+  readonly tokenId: string;
   readonly tokenPublicId: string;
   readonly projectPublicId: string;
 }

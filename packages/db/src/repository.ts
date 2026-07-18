@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, lt, or } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -727,6 +727,137 @@ export class DoneBondRepository {
       .where(eq(projects.publicId, publicId))
       .limit(1);
     return project?.project ?? null;
+  }
+
+  public async findTaskBinding(taskPublicId: string): Promise<{
+    readonly id: string;
+    readonly projectId: string;
+    readonly projectPublicId: string;
+    readonly policyId: string;
+    readonly taskHash: string;
+    readonly policyHash: string;
+  } | null> {
+    try {
+      const [task] = await this.database
+        .select({
+          id: tasks.id,
+          projectId: tasks.projectId,
+          projectPublicId: projects.publicId,
+          policyId: tasks.policyId,
+          taskHash: tasks.taskHash,
+          policyHash: policies.policyHash
+        })
+        .from(tasks)
+        .innerJoin(projects, eq(projects.id, tasks.projectId))
+        .innerJoin(policies, eq(policies.id, tasks.policyId))
+        .where(eq(tasks.publicId, taskPublicId))
+        .limit(1);
+      return task ?? null;
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  public async listEvidence(
+    taskPublicId: string,
+    options: { readonly limit: number; readonly cursor?: { createdAt: Date; publicId: string } }
+  ) {
+    try {
+      const [task] = await this.database
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(eq(tasks.publicId, taskPublicId))
+        .limit(1);
+      if (!task) return { items: [], nextCursor: null };
+      const cursorCondition = options.cursor
+        ? or(
+            lt(evidenceBundles.createdAt, options.cursor.createdAt),
+            and(
+              eq(evidenceBundles.createdAt, options.cursor.createdAt),
+              lt(evidenceBundles.publicId, options.cursor.publicId)
+            )
+          )
+        : undefined;
+      const rows = await this.database
+        .select({
+          publicId: evidenceBundles.publicId,
+          taskPublicId: tasks.publicId,
+          projectPublicId: projects.publicId,
+          evidenceHash: evidenceBundles.evidenceHash,
+          commitHashDerived: evidenceBundles.commitHashDerived,
+          gitObjectId: evidenceBundles.gitObjectId,
+          passing: evidenceBundles.passing,
+          bundleSizeBytes: evidenceBundles.bundleSizeBytes,
+          schemaVersion: evidenceBundles.schemaVersion,
+          createdAt: evidenceBundles.createdAt
+        })
+        .from(evidenceBundles)
+        .innerJoin(tasks, eq(tasks.id, evidenceBundles.taskId))
+        .innerJoin(projects, eq(projects.id, evidenceBundles.projectId))
+        .where(
+          cursorCondition
+            ? and(eq(evidenceBundles.taskId, task.id), cursorCondition)
+            : eq(evidenceBundles.taskId, task.id)
+        )
+        .orderBy(desc(evidenceBundles.createdAt), desc(evidenceBundles.publicId))
+        .limit(options.limit + 1);
+      const items = rows.slice(0, options.limit);
+      const last = rows[options.limit];
+      const nextCursor =
+        last === undefined ? null : { createdAt: last.createdAt, publicId: last.publicId };
+      return { items, nextCursor };
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
+  }
+
+  public async getEvidence(publicId: string) {
+    try {
+      const [bundle] = await this.database
+        .select({
+          id: evidenceBundles.id,
+          publicId: evidenceBundles.publicId,
+          taskPublicId: tasks.publicId,
+          projectPublicId: projects.publicId,
+          evidenceHash: evidenceBundles.evidenceHash,
+          commitHashDerived: evidenceBundles.commitHashDerived,
+          gitObjectId: evidenceBundles.gitObjectId,
+          passing: evidenceBundles.passing,
+          bundleSizeBytes: evidenceBundles.bundleSizeBytes,
+          schemaVersion: evidenceBundles.schemaVersion,
+          createdAt: evidenceBundles.createdAt
+        })
+        .from(evidenceBundles)
+        .innerJoin(tasks, eq(tasks.id, evidenceBundles.taskId))
+        .innerJoin(projects, eq(projects.id, evidenceBundles.projectId))
+        .where(eq(evidenceBundles.publicId, publicId))
+        .limit(1);
+      if (!bundle) return null;
+      const checks = await this.database
+        .select()
+        .from(verificationChecks)
+        .where(eq(verificationChecks.evidenceBundleId, bundle.id))
+        .orderBy(verificationChecks.checkKey);
+      return {
+        ...bundle,
+        checks: checks.map((check) => ({
+          checkKey: check.checkKey,
+          label: check.label,
+          required: check.required,
+          status: check.status,
+          startedAt: check.startedAt,
+          durationMs: check.durationMs,
+          exitCode: check.exitCode,
+          signal: check.signal,
+          stdoutDigest: check.stdoutDigest,
+          stderrDigest: check.stderrDigest,
+          stdoutPreview: check.stdoutPreview,
+          stderrPreview: check.stderrPreview
+        }))
+      };
+    } catch (error) {
+      throw translateDatabaseError(error);
+    }
   }
 
   /**

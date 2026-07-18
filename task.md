@@ -263,14 +263,24 @@ git remote add origin git@github-personal:Vedant817/donebond.git
 
 ## 4.6 Evidence API
 
-- [ ] Accept authenticated, bounded evidence uploads.
-- [ ] Validate schema and required checks.
-- [ ] Recompute policy/task/commit/evidence commitments.
-- [ ] Run residual secret checks.
-- [ ] Store safe bundle in object storage or database for MVP.
-- [ ] Persist check summaries transactionally.
-- [ ] Return unsigned receipt call parameters only for passing evidence.
-- [ ] Prevent conflicting replay/idempotency requests.
+- [x] Accept authenticated, bounded evidence uploads.
+- [x] Validate schema and required checks.
+- [x] Recompute policy/task/evidence commitments (evidence hash is server-recomputed via `canonicalKeccak256`; submitted `task.taskHash`/`policy.policyHash` are compared against the current DB task/policy record and rejected with `EVIDENCE_HASH_MISMATCH` on drift). Git commit derivation is verified CLI-side before upload (`packages/evidence` `GIT_COMMIT_MISMATCH`); the API has no independent repository access to re-derive it.
+- [x] Run residual secret checks (server re-scans redacted check output with `findResidualSecrets` before persisting; `EVIDENCE_RESIDUAL_SECRET` on a hit — defense in depth against a CLI that redacted incorrectly).
+- [x] Store safe bundle in object storage or database for MVP (metadata + checks persisted relationally in `evidence_bundles`/`verification_checks`).
+- [x] Persist check summaries transactionally (`DoneBondRepository.persistEvidence`, one transaction for idempotency key, bundle row, checks, and audit event).
+- [ ] Return unsigned receipt call parameters only for passing evidence — deferred to 4.7 (Public receipt API); requires chain/contract calldata wiring analogous to task chain-intent and is out of scope for the upload/list/detail endpoints built here.
+- [x] Prevent conflicting replay/idempotency requests (`DB_IDEMPOTENCY_CONFLICT` → `EVIDENCE_UPLOAD_CONFLICT`, 409; verified in `packages/db` and `apps/web` tests).
+
+Routes: `POST /api/v1/projects/[projectId]/evidence` (submit), `GET /api/v1/projects/[projectId]/tasks/[taskId]/evidence` (list, keyset-paginated), `GET /api/v1/evidence/[evidenceId]` (public detail). The listing route is nested under the project (not the flat `/api/v1/tasks/[taskId]/evidence` shape sketched mid-session) because CLI-token authentication is project-bound and must know the project before authenticating — matches the existing `projects/[projectId]/policies/[policyId]` nesting convention.
+
+**Verification:**
+
+```bash
+pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:contracts && pnpm build
+```
+
+All pass: shared 16/16, db 69/70 (1 pre-existing skipped Postgres integration test), cli 22/22, web 82/82 (10 new evidence-handlers tests, 3 new evidence-runtime tests), contracts 32/32, production build succeeds with the three new routes registered. `pnpm test:e2e` was not run — it requires `NEXT_PUBLIC_APP_URL`/`AUTH_SECRET` local env setup that has never been configured in this repo (only `.env.example` exists) and was not part of this task's scope.
 
 ## 4.7 Public receipt API
 
@@ -781,3 +791,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: Task creation validates project ownership, policy binding, supported networks, and canonical hashes server-side. Chain intent persists before wallet use and is replay-safe. Wallet outcome rejects browser-confirmed states. Reconciliation hides unknown transactions behind auth boundary. Receipt provider never exposes RPC credentials.
 - Remaining risks/blockers: Push blocked by SSH key issue. Real PostgreSQL and Monad RPC not available for integration tests. Contract not deployed. UI work (Milestone 6) not started.
 - Commit: `94d29bf4bf5e5c76b9b2301151cbaee842d9bbbb`
+
+## 2026-07-18 — Claude Code/coordinator — 4.6 (complete)
+- Branch/worktree: `main`
+- Summary: Completed the Evidence API left in progress at a checkpoint. Added `EVIDENCE_NOT_FOUND`/`EVIDENCE_UPLOAD_CONFLICT` error codes. Added `DoneBondRepository.findTaskBinding` (resolves a task's project/policy UUIDs, project public ID, and current `taskHash`/`policyHash` from its public ID) and fixed a pre-existing type error plus a pagination bug (`nextCursor` was always `null` on a supplied cursor) in the in-progress `listEvidence` query. Rewrote the `evidence-runtime.ts` store adapter to properly build `EvidencePersistenceInput` from resolved UUIDs instead of empty-string placeholders, and to convert ISO check timestamps to `Date` before insert. Added server-side defense-in-depth the checkpoint's draft omitted: submitted `task.taskHash`/`policy.policyHash` are compared against the current DB record (`EVIDENCE_HASH_MISMATCH` on drift) and check stdout/stderr previews are re-scanned for residual secrets (`EVIDENCE_RESIDUAL_SECRET`) before persistence, reusing `@donebond/evidence`'s `findResidualSecrets`. Fixed the CLI token principal to carry the token's internal UUID (`tokenId`) so the store can populate `submittedByTokenId` correctly instead of the public ID. Fixed `getEvidence`'s 404 body to use the standard `HttpError`/`ApiErrorSchema` envelope instead of a hand-built object missing `correlationId`/`retryable`. Created the three route files: `POST /api/v1/projects/[projectId]/evidence`, `GET /api/v1/projects/[projectId]/tasks/[taskId]/evidence` (nested under project, not the flat path sketched mid-session, because CLI-token auth must know the project before authenticating), `GET /api/v1/evidence/[evidenceId]`.
+- Files changed: `packages/shared/src/errors.ts`, `packages/db/src/repository.ts`, `packages/db/test/repository.test.mjs` (fake DB helper extended with `orderBy`/bare-`then` support, 3 new tests), `apps/web/src/server/cli-token.ts`, `apps/web/src/server/cli-token.test.ts`, `apps/web/src/server/evidence-handlers.ts`, `apps/web/src/server/evidence-handlers.test.ts` (new, 10 tests), `apps/web/src/server/evidence-runtime.ts`, `apps/web/src/server/evidence-runtime.test.ts` (new, 3 tests), three new route files under `apps/web/src/app/api/v1/`.
+- Verification commands: `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:contracts && pnpm build`.
+- Results: All pass. shared 16/16, db 69/70 (1 pre-existing guarded Postgres integration test skipped), cli 22/22, web 82/82, contracts 32/32. Production build compiles all three new evidence routes as dynamic Node routes.
+- Security/privacy notes: Evidence submission now fails closed if the client-declared task/policy commitments don't match the authoritative DB row (prevents uploading evidence against a stale or wrong policy/task version), and if redacted check output still contains a high-confidence secret pattern after CLI-side redaction. `submittedByTokenId` stores the token's internal UUID, never the public ID. Idempotency conflicts and unknown evidence both fail closed with `409`/`404` through the shared `HttpError`/`ApiErrorSchema` envelope.
+- Remaining risks/blockers: `pnpm test:e2e` was not run — requires `NEXT_PUBLIC_APP_URL`/`AUTH_SECRET` local env configuration that has never existed in this repo (only `.env.example`); unrelated to this change. Returning unsigned receipt call parameters for passing evidence is deferred to 4.7 (needs chain calldata wiring analogous to task chain-intent). Push blocked by the same SSH key issue noted in 4.5. Real PostgreSQL/Monad RPC integration still unavailable.
+- Commit: pending (see repository HEAD after this work-log update).

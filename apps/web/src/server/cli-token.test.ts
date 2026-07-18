@@ -88,7 +88,11 @@ test("CLI authentication is project-bound, rate-limited, and updates use through
   const store: CliTokenUseStore = {
     async useActiveCliToken(tokenDigest, expectedProject, usedAt) {
       calls.push({ tokenDigest, expectedProject, usedAt });
-      return { tokenPublicId: generateOpaquePublicId(), projectPublicId };
+      return {
+        tokenId: generateOpaquePublicId(),
+        tokenPublicId: generateOpaquePublicId(),
+        projectPublicId
+      };
     }
   };
   const allow: CliTokenRateLimiter = {

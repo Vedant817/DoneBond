@@ -63,8 +63,14 @@ function createFakeDatabase({ selects = [], returns = [] } = {}) {
         for() {
           return builder;
         },
+        orderBy() {
+          return builder;
+        },
         limit() {
           return Promise.resolve(selects.shift() ?? []);
+        },
+        then(resolve, reject) {
+          return Promise.resolve(selects.shift() ?? []).then(resolve, reject);
         }
       };
       return builder;
@@ -318,6 +324,99 @@ test("evidence retry returns only the matching persisted request", async () => {
     new DoneBondRepository(conflictDatabase).persistEvidence(evidenceInput()),
     (error) => error instanceof DatabaseServiceError && error.code === "DB_IDEMPOTENCY_CONFLICT"
   );
+});
+
+test("findTaskBinding resolves task, project, and policy identity or null", async () => {
+  const binding = {
+    id: ids.task,
+    projectId: ids.project,
+    projectPublicId: publicId,
+    policyId: ids.policy,
+    taskHash: hash,
+    policyHash: hash
+  };
+  const found = createFakeDatabase({ selects: [[binding]] });
+  assert.deepEqual(await new DoneBondRepository(found).findTaskBinding(publicId), binding);
+
+  const missing = createFakeDatabase({ selects: [[]] });
+  assert.equal(await new DoneBondRepository(missing).findTaskBinding(publicId), null);
+});
+
+test("listEvidence returns nothing for an unknown task and paginates known evidence", async () => {
+  const missing = createFakeDatabase({ selects: [[]] });
+  assert.deepEqual(await new DoneBondRepository(missing).listEvidence(publicId, { limit: 25 }), {
+    items: [],
+    nextCursor: null
+  });
+
+  const row = (suffix) => ({
+    publicId: `${publicId.slice(0, -1)}${suffix}`,
+    taskPublicId: publicId,
+    projectPublicId: publicId,
+    evidenceHash: hash,
+    commitHashDerived: hash,
+    gitObjectId: "a".repeat(40),
+    passing: true,
+    bundleSizeBytes: 10,
+    schemaVersion: 1,
+    createdAt: new Date("2026-07-17T00:00:00.000Z")
+  });
+  const underLimit = createFakeDatabase({
+    selects: [[{ id: ids.task }], [row("a")]]
+  });
+  const underLimitResult = await new DoneBondRepository(underLimit).listEvidence(publicId, {
+    limit: 25
+  });
+  assert.equal(underLimitResult.items.length, 1);
+  assert.equal(underLimitResult.nextCursor, null);
+
+  const overLimit = createFakeDatabase({
+    selects: [[{ id: ids.task }], [row("a"), row("b")]]
+  });
+  const overLimitResult = await new DoneBondRepository(overLimit).listEvidence(publicId, {
+    limit: 1
+  });
+  assert.equal(overLimitResult.items.length, 1);
+  assert.deepEqual(overLimitResult.nextCursor, {
+    createdAt: row("b").createdAt,
+    publicId: row("b").publicId
+  });
+});
+
+test("getEvidence returns null for an unknown ID and a full detail record otherwise", async () => {
+  const missing = createFakeDatabase({ selects: [[]] });
+  assert.equal(await new DoneBondRepository(missing).getEvidence(publicId), null);
+
+  const bundleRow = {
+    id: "00000000-0000-4000-8000-000000000005",
+    publicId,
+    taskPublicId: publicId,
+    projectPublicId: publicId,
+    evidenceHash: hash,
+    commitHashDerived: hash,
+    gitObjectId: "a".repeat(40),
+    passing: true,
+    bundleSizeBytes: 10,
+    schemaVersion: 1,
+    createdAt: new Date("2026-07-17T00:00:00.000Z")
+  };
+  const checkRow = {
+    checkKey: "Test.Unit",
+    label: "Unit tests",
+    required: true,
+    status: "passed",
+    startedAt: new Date("2026-07-17T00:00:00.000Z"),
+    durationMs: 5,
+    exitCode: 0,
+    signal: null,
+    stdoutDigest: hash,
+    stderrDigest: hash,
+    stdoutPreview: "",
+    stderrPreview: ""
+  };
+  const found = createFakeDatabase({ selects: [[bundleRow], [checkRow]] });
+  const detail = await new DoneBondRepository(found).getEvidence(publicId);
+  assert.deepEqual(detail, { ...bundleRow, checks: [checkRow] });
 });
 
 test("contract event exact replay is a no-op while removed transition is audited", async () => {
