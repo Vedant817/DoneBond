@@ -22,3 +22,90 @@ main {
   max-width: 50rem;
   padding: clamp(2rem, 8vw, 8rem);
 }
+
+/*
+ * Landing page (milestone 6.2) overrides the generic single-block `main`
+ * layout above -- it has several stacked sections rather than one centered
+ * block, so it opts in via `.landing` at higher selector specificity instead
+ * of changing the shared default other pages may still rely on.
+ */
+main.landing {
+  display: block;
+  min-height: 0;
+  align-content: unset;
+  max-width: 64rem;
+  padding: clamp(2rem, 6vw, 6rem) clamp(1.5rem, 8vw, 6rem);
+}
+
+.landing-section {
+  padding-block: var(--db-space-8);
+  border-top: 1px solid var(--db-color-border);
+}
+
+.landing-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.landing-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--db-space-3);
+}
+
+.landing-cta-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--db-space-2);
+  border-radius: var(--db-radius-md);
+  border: 1px solid transparent;
+  padding: var(--db-space-2) var(--db-space-4);
+  font-family: var(--db-font-sans);
+  font-size: var(--db-text-base);
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  transition:
+    background-color var(--db-motion-fast) var(--db-motion-easing),
+    border-color var(--db-motion-fast) var(--db-motion-easing),
+    color var(--db-motion-fast) var(--db-motion-easing);
+}
+
+.landing-cta-link:focus-visible {
+  outline: none;
+  box-shadow: var(--db-focus-ring);
+}
+
+.landing-cta-link--primary {
+  background: var(--db-color-accent);
+  color: var(--db-color-text-on-accent);
+}
+
+.landing-cta-link--primary:hover {
+  background: var(--db-color-accent-strong);
+}
+
+.landing-cta-link--secondary {
+  background: var(--db-color-surface-raised);
+  color: var(--db-color-text);
+  border-color: var(--db-color-border);
+}
+
+.landing-cta-link--secondary:hover {
+  border-color: var(--db-color-border-strong);
+}
+
+.landing-two-column {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--db-space-6);
+  align-items: start;
+}
+
+.landing-panel {
+  background: var(--db-color-surface);
+  border: 1px solid var(--db-color-border);
+  border-radius: var(--db-radius-lg);
+  padding: var(--db-space-5);
+}

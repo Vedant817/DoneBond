@@ -381,10 +381,12 @@ All pass: shared 16/16, db 69/70 (1 pre-existing skipped Postgres integration te
 
 ## 6.2 Landing and onboarding
 
-- [ ] Clear product pitch.
-- [ ] Explain the evidence/chain distinction accurately.
-- [ ] Show install command and real sample receipt.
-- [ ] Provide “Create project” path.
+- [x] Clear product pitch (hero states the actual mechanism — policy → CLI-executed evidence → wallet-submitted Monad receipt — not generic marketing).
+- [x] Explain the evidence/chain distinction accurately (`#evidence-vs-chain` section states explicitly that the chain "never executes a test, a linter, or a build" and "is not a verifier," sourced from ARCHITECTURE.md's trust-boundary language to avoid "blockchain verifies your code" cliché).
+- [x] Show install command and a labeled example receipt. The CLI is not yet published (`apps/cli/package.json` is still `"private": true` — milestone 5.8 unbuilt), so the page shows the real, tested pnpm-workspace run sequence instead of a fabricated `npm install -g donebond`, with the eventual published command shown only as a muted "coming soon" note. The example receipt is explicitly labeled "Illustrative only" and rendered with real `@donebond/ui` primitives (`HashDisplay`/`CheckResult`/`TransactionState`) rather than a screenshot — the public receipt page itself (4.7) did not exist when this was built.
+- [x] Provide a "Create project" path — CTA links to `/projects/new`, which 404s until milestone 6.3 wires a real page there (honest incremental state, not a fabricated working page); the page copy itself says project creation is still in progress.
+
+**Verification:** `pnpm --filter @donebond/web typecheck/build`, `pnpm --filter @donebond/ui typecheck/build/test` (28/28, unchanged), `pnpm format:check`, `pnpm lint`. All re-run independently by the coordinating session.
 
 ## 6.3 Project screens
 
@@ -815,3 +817,13 @@ Do not rewrite or erase earlier entries except to correct an explicitly document
 - Security/privacy notes: No new runtime dependency beyond `react`/`@types/react` (already used elsewhere in the workspace at the same pinned versions) — no CSS framework, no component library, no DOM test runner added. Workspace boundary check confirms `@donebond/ui` still depends only on `@donebond/shared` internally.
 - Remaining risks/blockers: Milestones 6.2–6.7 (the actual product screens) still need to consume these primitives — only the landing page has a minimal integration touchpoint so far. No jsdom/RTL exists in this repo, so component rendering itself (as opposed to the pure logic it calls) is not exercised by an automated DOM test; a future milestone should decide whether to add one. Push blocked by the same SSH key issue noted in 4.5/4.6.
 - Commit: `6d8ce963f6cff2d0540a6e5ed698c7b5f7c40c33`.
+
+## 2026-07-18 — Claude Code/coordinator (frontend-engineer subagent) — 6.2 (complete)
+- Branch/worktree: `main` (subagent worked directly in the primary worktree, scoped to `apps/web/src/app/**` only; a separate isolated-worktree agent was concurrently building 4.7).
+- Summary: Built the landing page's hero pitch, a dedicated evidence/chain distinction section, an install-command section, and a labeled example receipt, entirely reusing `@donebond/ui` (milestone 6.1). Verified `apps/cli` is still `"private": true` (no publish) before writing any install instructions, so the shown command is the real, tested `pnpm install && pnpm --filter @donebond/cli build && node apps/cli/dist/index.js init && node apps/cli/dist/index.js verify` sequence rather than a fabricated `npm install -g donebond`. The example receipt is explicitly labeled illustrative-only (randomly generated hash values, not real data) and rendered with real design-system primitives. The "Create project" CTA targets `/projects/new`, which will 404 until milestone 6.3 wires a page there — noted in the page copy itself.
+- Files changed: `apps/web/src/app/page.tsx` (full rewrite of the 6.1 integration stub), `apps/web/src/app/styles.css` (additive `.landing-*` classes at higher specificity than the existing bare `main` rule, reusing existing `@donebond/ui` tokens; other pages keep the current centered-block default).
+- Verification commands: `pnpm --filter @donebond/web typecheck/build`, `pnpm --filter @donebond/ui typecheck/build/test`, `pnpm format:check`, `pnpm lint`. Re-run independently by the coordinating session, not just taken from the subagent's report.
+- Results: All pass. `@donebond/web` typecheck/build succeed, `/` still lists as a static route in production build alongside all API routes; `@donebond/ui` test 28/28 unchanged (package not touched); format/lint clean.
+- Security/privacy notes: No fabricated install command or receipt data — both honesty constraints from the brief were independently verified against the actual state of `apps/cli/package.json` and the (at-the-time-nonexistent) public receipt API, not assumed.
+- Remaining risks/blockers: `/projects/new` is a dangling link until 6.3 lands. Milestones 6.3–6.7 still need to build the actual authenticated product screens (wallet connection, project/task CRUD) — none of that exists yet. Push blocked by the same SSH key issue noted in prior milestones.
+- Commit: pending (recorded after this work-log update is committed).
